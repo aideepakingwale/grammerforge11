@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Activity, BarChart3, BookOpen, CheckCircle2, CreditCard, FileText, KeyRound, Users, Wand2 } from "lucide-react";
+import { Activity, BarChart3, BookOpen, CheckCircle2, CreditCard, DatabaseZap, FileText, KeyRound, Mail, Server, Sparkles, Users, Wand2, WalletCards } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { UsersPanel } from "@/frontend/features/admin/panels/users-panel";
 import { ConfigPanel } from "@/frontend/features/admin/panels/config-panel";
@@ -35,6 +35,14 @@ const tabs = [
   ["pages", "Pages", FileText]
 ] as const;
 
+const stackItems = [
+  ["Hosting", "Vercel serverless", Server],
+  ["Database", "Neon / Supabase Postgres", DatabaseZap],
+  ["Cache", "Upstash Redis", Activity],
+  ["AI", "Gemini + Groq switchable", Sparkles],
+  ["Payments", "Stripe", WalletCards],
+  ["Email", "Brevo", Mail]
+] as const;
 
 export function AdminDashboard() {
   const [data, setData] = useState<AdminData | null>(null);
@@ -141,6 +149,16 @@ export function AdminDashboard() {
                   <Icon size={20} />
                 </span>
               </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-3 lg:grid-cols-6">
+          {stackItems.map(([label, value, Icon]) => (
+            <div key={label} className="rounded-lg border border-line bg-white/90 p-3 shadow-soft">
+              <Icon className="text-teal" size={18} />
+              <p className="mt-2 text-xs font-black uppercase text-ink/45">{label}</p>
+              <p className="mt-1 text-sm font-bold text-ink">{value}</p>
             </div>
           ))}
         </div>

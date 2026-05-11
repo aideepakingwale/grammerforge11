@@ -149,7 +149,9 @@ export type QuestionGenerationJob = {
     syllabusTopicSlug: string;
     subTopic: string;
     difficulty?: Difficulty;
+    difficultyMix?: Difficulty[];
     questionType?: QuestionType;
+    questionTypeMix?: QuestionType[];
     count: number;
   }>;
   provider: LlmProvider;

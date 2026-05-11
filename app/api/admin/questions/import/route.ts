@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/backend/auth/session";
-import { importGeneratedQuestions } from "@/backend/exams/demo-store";
+import { importGeneratedQuestions } from "@/backend/questions/question-generation-service";
 
 const payloadSchema = z.object({
   mode: z.enum(["text", "svg"]),

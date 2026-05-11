@@ -1,6 +1,6 @@
 import type { PublicPage } from "@/backend/shared/types";
 import { uid } from "@/backend/shared/utils";
-import { store } from "@/backend/exams/demo-store";
+import { store } from "@/backend/platform/app-store";
 
 export function listPublicPages() {
   return store().publicPages;

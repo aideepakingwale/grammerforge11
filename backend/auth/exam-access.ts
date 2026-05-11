@@ -1,6 +1,6 @@
 import type { SafeUser } from "@/backend/shared/types";
 import type { Exam } from "@/backend/shared/types";
-import { listStudentsFor } from "@/backend/exams/demo-store";
+import { listStudentsFor } from "@/backend/auth/local-user-service";
 
 export function canWriteExam(user: SafeUser, exam: Exam) {
   if (user.role === "ADMIN") return true;

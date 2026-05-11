@@ -1,7 +1,8 @@
 import { Redis } from "@upstash/redis";
 import type { Exam, LlmProvider, SafeUser } from "@/backend/shared/types";
 import { buildPerformanceAnalytics } from "@/backend/analytics/performance";
-import { examsForStudent, upsertInsight } from "@/backend/exams/demo-store";
+import { examsForStudent } from "@/backend/exams/exam-service";
+import { upsertInsight } from "@/backend/insights/insight-store";
 import { getPlatformConfig } from "@/backend/admin/platform-config-service";
 
 const redis =

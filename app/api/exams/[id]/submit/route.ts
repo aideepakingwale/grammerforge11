@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/backend/auth/session";
-import { getExam, submitExam } from "@/backend/exams/demo-store";
+import { getExam, submitExam } from "@/backend/exams/exam-service";
 import { canWriteExam } from "@/backend/auth/exam-access";
 
 export async function POST(_request: Request, context: { params: Promise<{ id: string }> }) {

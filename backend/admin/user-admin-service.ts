@@ -1,7 +1,7 @@
 import bcrypt from "bcryptjs";
 import type { AdminUserInput, SafeUser } from "@/backend/shared/types";
 import { uid } from "@/backend/shared/utils";
-import { store, toSafeUser } from "@/backend/exams/demo-store";
+import { store, toSafeUser } from "@/backend/platform/app-store";
 
 const adminId = "user_admin_demo";
 const parentId = "user_parent_demo";

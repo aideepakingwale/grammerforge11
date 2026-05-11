@@ -1,5 +1,6 @@
 import type { PlatformConfig } from "@/backend/shared/types";
-import { llmQuotaSnapshot, store } from "@/backend/exams/demo-store";
+import { store } from "@/backend/platform/app-store";
+import { llmQuotaSnapshot } from "@/backend/questions/question-generation-service";
 
 export function getPlatformConfig() {
   const data = store();

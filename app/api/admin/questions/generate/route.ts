@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/backend/auth/session";
-import { generateQuestionCandidates } from "@/backend/exams/demo-store";
+import { generateQuestionCandidates } from "@/backend/questions/question-generation-service";
 
 const schema = z.object({
   subject: z.enum(["MATHS", "ENGLISH", "VERBAL_REASONING", "NON_VERBAL_REASONING"]),

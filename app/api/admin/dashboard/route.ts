@@ -5,7 +5,7 @@ import { getPlatformConfig } from "@/backend/admin/platform-config-service";
 import { listPlans } from "@/backend/plans/plan-service";
 import { listPublicPages } from "@/backend/admin/public-pages-service";
 import { platformAnalytics } from "@/backend/admin/platform-analytics-service";
-import { questionGenerationAdminState } from "@/backend/exams/demo-store";
+import { questionGenerationAdminState } from "@/backend/questions/question-generation-service";
 
 export async function GET() {
   await requireUser(["ADMIN"]);

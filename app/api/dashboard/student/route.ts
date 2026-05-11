@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/backend/auth/session";
 import { dashboardInsights } from "@/backend/ai/insights";
-import { examsForStudent } from "@/backend/exams/demo-store";
+import { examsForStudent } from "@/backend/exams/exam-service";
 import { getPlanForTier } from "@/backend/plans/plan-service";
 
 export async function GET() {

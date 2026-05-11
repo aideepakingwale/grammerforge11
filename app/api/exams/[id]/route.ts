@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/backend/auth/session";
 import { listStudentsFor } from "@/backend/auth/users";
-import { getExam } from "@/backend/exams/demo-store";
+import { getExam } from "@/backend/exams/exam-service";
 
 export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
   const user = await requireUser();

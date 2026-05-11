@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/backend/auth/session";
-import { addAuditLog, getExam } from "@/backend/exams/demo-store";
+import { getExam } from "@/backend/exams/exam-service";
+import { addAuditLog } from "@/backend/exams/audit-log-service";
 import { canWriteExam } from "@/backend/auth/exam-access";
 
 const schema = z.object({

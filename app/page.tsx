@@ -1,12 +1,14 @@
-import { Activity, ArrowRight, BarChart3, BookOpenCheck, DatabaseZap, LockKeyhole, ShieldCheck, Sparkles, Timer, TrendingUp, Wand2 } from "lucide-react";
+import { ArrowRight, BarChart3, BookOpenCheck, BrainCircuit, ClipboardCheck, LockKeyhole, Medal, ShieldCheck, Sparkles, Target, Timer, TrendingUp } from "lucide-react";
 import { AuthPanel } from "@/frontend/features/auth/auth-panel";
 
 const features = [
-  ["Hybrid question engine", "Question-bank first, Gemini/Groq fallback, structured imports, and quota-aware generation.", Wand2],
-  ["Secure exam mode", "Fullscreen, focus monitoring, autosave, audit logs, and server-aligned timer controls.", ShieldCheck],
-  ["Parent intelligence", "Subject trends, topic breakdowns, readiness charts, AI plans, and subscription gates.", TrendingUp],
-  ["Student motivation", "Rewards, badges, encouraging coaching, and targeted quick quizzes for every learner.", Sparkles]
+  ["Real 11+ exam feel", "Timed papers, subject-specific patterns, realistic question flow, review flags, and instant results.", ClipboardCheck],
+  ["AI study coach", "Clear explanations, weak-topic practice, parent study plans, and child-friendly coaching tips.", BrainCircuit],
+  ["Parent intelligence", "Score trends, topic breakdowns, readiness charts, and focused action plans after every exam.", TrendingUp],
+  ["Student motivation", "Rewards, badges, progress streaks, and targeted quick quizzes that keep learning encouraging.", Medal]
 ];
+
+const benefitChips = ["Realistic timed papers", "AI explanations", "Parent progress dashboard", "Rewards and badges", "Topic-wise improvement", "Safe exam mode"];
 
 const previewRows = [
   ["Maths", "Fractions", "82%", "Up 14%", "bg-teal/10 text-teal"],
@@ -31,8 +33,8 @@ export default function Home() {
               <span className="text-lg font-extrabold">GrammarForge 11+</span>
             </div>
             <div className="hidden items-center gap-2 md:flex">
-              <span className="chip"><DatabaseZap size={14} /> Neon-ready</span>
-              <span className="chip"><Activity size={14} /> AI cached</span>
+              <span className="chip"><Target size={14} /> Personalised practice</span>
+              <span className="chip"><ShieldCheck size={14} /> Exam confidence</span>
               <a href="#auth" className="gradient-button inline-flex min-h-10 items-center gap-2 rounded-md px-4 text-sm font-black text-white transition">
                 Start <ArrowRight size={16} />
               </a>
@@ -50,7 +52,7 @@ export default function Home() {
             </h1>
             <p className="mt-5 max-w-2xl text-lg font-medium leading-8 text-ink/68">
               A premium SaaS platform for 11+ exam practice with realistic papers, parent analytics,
-              gamified student progress, AI-assisted explanations, and zero-cost startup cloud architecture.
+              gamified student progress, AI-assisted explanations, and focused topic-by-topic improvement.
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
               <a href="#auth" className="gradient-button inline-flex min-h-11 items-center gap-2 rounded-md px-5 text-sm font-black text-white transition">
@@ -59,7 +61,7 @@ export default function Home() {
               <span className="inline-flex min-h-11 items-center rounded-md border border-line bg-white/80 px-4 text-sm font-bold text-ink shadow-sm">Inspired by Deepak, created for Devansh, built for every 11+ family</span>
             </div>
             <div className="mt-7 flex flex-wrap gap-2">
-              {["Vercel", "Neon / Supabase", "Upstash Redis", "Gemini + Groq", "Stripe", "Brevo"].map((item) => (
+              {benefitChips.map((item) => (
                 <span key={item} className="chip">{item}</span>
               ))}
             </div>
@@ -121,12 +123,12 @@ export default function Home() {
               <h2 className="mt-2 text-2xl font-extrabold">One flow for exams, review, and growth.</h2>
             </div>
             <div className="rounded-md bg-white/80 p-4 shadow-sm">
-              <p className="text-3xl font-black text-teal">95%</p>
-              <p className="mt-1 text-sm font-bold text-ink/60">question-bank retrieval to protect free-tier AI quota.</p>
+              <p className="text-3xl font-black text-teal">4</p>
+              <p className="mt-1 text-sm font-bold text-ink/60">core 11+ subjects with realistic practice journeys.</p>
             </div>
             <div className="rounded-md bg-white/80 p-4 shadow-sm">
-              <p className="text-3xl font-black text-moss">4</p>
-              <p className="mt-1 text-sm font-bold text-ink/60">configurable tiers: Foundation, Alpha, Velocity, Apex.</p>
+              <p className="text-3xl font-black text-moss">Daily</p>
+              <p className="mt-1 text-sm font-bold text-ink/60">parent-visible progress, rewards, and focus recommendations.</p>
             </div>
           </div>
         </section>

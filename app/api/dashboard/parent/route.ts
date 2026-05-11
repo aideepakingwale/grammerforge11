@@ -3,7 +3,7 @@ import { requireUser } from "@/backend/auth/session";
 import { dashboardInsights } from "@/backend/ai/insights";
 import { buildPerformanceAnalytics } from "@/backend/analytics/performance";
 import { listStudentsFor } from "@/backend/auth/users";
-import { examsForStudent } from "@/backend/exams/demo-store";
+import { examsForStudent } from "@/backend/exams/exam-service";
 import { getPlanForTier } from "@/backend/plans/plan-service";
 
 export async function GET() {

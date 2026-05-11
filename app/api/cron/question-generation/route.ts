@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { runScheduledQuestionGenerationNow } from "@/backend/exams/demo-store";
+import { runScheduledQuestionGenerationNow } from "@/backend/questions/question-generation-service";
 
 export async function GET(request: Request) {
   const configuredSecret = process.env.CRON_SECRET;

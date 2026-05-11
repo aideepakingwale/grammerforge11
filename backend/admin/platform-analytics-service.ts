@@ -1,6 +1,6 @@
 import type { PlatformAnalytics } from "@/backend/shared/types";
 import { questionBank } from "@/backend/questions/question-bank";
-import { store } from "@/backend/exams/demo-store";
+import { store } from "@/backend/platform/app-store";
 
 export function platformAnalytics(): PlatformAnalytics {
   const data = store();

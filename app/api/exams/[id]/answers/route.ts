@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/backend/auth/session";
-import { getExam, saveAnswer } from "@/backend/exams/demo-store";
+import { getExam, saveAnswer } from "@/backend/exams/exam-service";
 import { canWriteExam } from "@/backend/auth/exam-access";
 
 const schema = z.object({

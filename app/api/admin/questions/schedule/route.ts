@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/backend/auth/session";
-import { runScheduledQuestionGenerationNow, updateQuestionGenerationSchedule } from "@/backend/exams/demo-store";
+import { runScheduledQuestionGenerationNow, updateQuestionGenerationSchedule } from "@/backend/questions/question-generation-service";
 
 const schema = z.object({
   enabled: z.boolean(),

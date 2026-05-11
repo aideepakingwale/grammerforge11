@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/backend/auth/session";
 import { findUser, listStudentsFor } from "@/backend/auth/users";
-import { createExam } from "@/backend/exams/demo-store";
+import { createExam } from "@/backend/exams/exam-service";
 import { planHasFeature, validateExamAccess } from "@/backend/plans/plan-service";
 import { examPatternFor } from "@/backend/exams/exam-patterns";
 import type { Tier } from "@/backend/shared/types";

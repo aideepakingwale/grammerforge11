@@ -1,5 +1,5 @@
 import type { Subject, SubscriptionPlanConfig, Tier } from "@/backend/shared/types";
-import { store } from "@/backend/exams/demo-store";
+import { store } from "@/backend/platform/app-store";
 
 export function listPlans() {
   return store().plans;
