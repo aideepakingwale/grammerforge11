@@ -10,6 +10,7 @@ const schema = z.object({
   count: z.number().int().min(1).max(100),
   microTopic: z.string().min(2).max(120),
   topic: z.string().min(2).max(160).optional(),
+  topics: z.array(z.string().min(2).max(160)).optional(),
   subTopics: z.array(z.string().min(2).max(120)).optional(),
   difficulties: z.array(z.enum(["EASY", "MEDIUM", "HARD", "ADVANCED"])).optional(),
   questionTypes: z.array(z.enum(["MULTIPLE_CHOICE", "SHORT_ANSWER"])).optional(),

@@ -30,7 +30,7 @@ type Props = {
 
 export function QuestionsPanel({ initial, mutate }: Props) {
   const [subject, setSubject] = useState<Subject>("MATHS");
-  const [topic, setTopic] = useState(syllabusRegistry.MATHS[0].name);
+  const [selectedTopics, setSelectedTopics] = useState<string[]>([syllabusRegistry.MATHS[0].name]);
   const [selectedSubTopics, setSelectedSubTopics] = useState<string[]>([]);
   const [selectedDifficulties, setSelectedDifficulties] = useState<Difficulty[]>(["MEDIUM"]);
   const [selectedQuestionTypes, setSelectedQuestionTypes] = useState<QuestionType[]>(["MULTIPLE_CHOICE"]);
@@ -60,16 +60,18 @@ export function QuestionsPanel({ initial, mutate }: Props) {
   const schedule = initial?.schedule ?? fallback;
   const jobs = initial?.jobs ?? [];
   const topics = syllabusRegistry[subject];
-  const selectedTopic = topics.find((item) => item.name === topic) ?? topics[0];
-  const visibleSubTopics = selectedTopic?.subTopics ?? [];
+  const selectedTopicGroups = topics.filter((item) => selectedTopics.includes(item.name));
+  const visibleSubTopics = Array.from(new Set((selectedTopicGroups.length ? selectedTopicGroups : topics).flatMap((item) => item.subTopics)));
+  const fallbackTopic = selectedTopicGroups[0] ?? topics[0];
 
   const generationPayload = {
     subject,
     difficulty: selectedDifficulties[0] ?? "MEDIUM",
     questionType: selectedQuestionTypes[0] ?? "MULTIPLE_CHOICE",
     count,
-    microTopic: selectedSubTopics[0] ?? selectedTopic?.subTopics[0] ?? selectedTopic?.name ?? "Mixed 11+ Practice",
-    topic,
+    microTopic: selectedSubTopics[0] ?? fallbackTopic?.subTopics[0] ?? fallbackTopic?.name ?? "Mixed 11+ Practice",
+    topic: fallbackTopic?.name,
+    topics: selectedTopics.length ? selectedTopics : topics.map((item) => item.name),
     subTopics: selectedSubTopics.length ? selectedSubTopics : visibleSubTopics.slice(0, Math.min(4, visibleSubTopics.length)),
     difficulties: selectedDifficulties,
     questionTypes: selectedQuestionTypes,
@@ -79,7 +81,7 @@ export function QuestionsPanel({ initial, mutate }: Props) {
   function changeSubject(nextSubject: Subject) {
     const firstTopic = syllabusRegistry[nextSubject][0];
     setSubject(nextSubject);
-    setTopic(firstTopic.name);
+    setSelectedTopics([firstTopic.name]);
     setSelectedSubTopics([]);
     setPrompt("");
     setCandidates([]);
@@ -142,7 +144,7 @@ export function QuestionsPanel({ initial, mutate }: Props) {
       <div className="space-y-4">
         <GuidedControls
           subject={subject}
-          topic={topic}
+          selectedTopics={selectedTopics}
           selectedSubTopics={selectedSubTopics}
           selectedDifficulties={selectedDifficulties}
           selectedQuestionTypes={selectedQuestionTypes}
@@ -152,7 +154,13 @@ export function QuestionsPanel({ initial, mutate }: Props) {
           visibleSubTopics={visibleSubTopics}
           working={working}
           onSubjectChange={changeSubject}
-          onTopicChange={(value) => { setTopic(value); setSelectedSubTopics([]); }}
+          onTopicToggle={(value) => {
+            setSelectedTopics((current) => {
+              const next = current.includes(value) ? current.filter((item) => item !== value) : [...current, value];
+              return next.length ? next : [value];
+            });
+            setSelectedSubTopics([]);
+          }}
           onSubTopicToggle={(value) => setSelectedSubTopics((current) => current.includes(value) ? current.filter((item) => item !== value) : [...current, value])}
           onDifficultyToggle={(value) => toggleListValue(value, setSelectedDifficulties)}
           onQuestionTypeToggle={(value) => toggleListValue(value, setSelectedQuestionTypes)}
@@ -184,7 +192,7 @@ export function QuestionsPanel({ initial, mutate }: Props) {
 
 function GuidedControls(props: {
   subject: Subject;
-  topic: string;
+  selectedTopics: string[];
   selectedSubTopics: string[];
   selectedDifficulties: Difficulty[];
   selectedQuestionTypes: QuestionType[];
@@ -194,7 +202,7 @@ function GuidedControls(props: {
   visibleSubTopics: string[];
   working: string;
   onSubjectChange: (value: Subject) => void;
-  onTopicChange: (value: string) => void;
+  onTopicToggle: (value: string) => void;
   onSubTopicToggle: (value: string) => void;
   onDifficultyToggle: (value: Difficulty) => void;
   onQuestionTypeToggle: (value: QuestionType) => void;
@@ -210,10 +218,8 @@ function GuidedControls(props: {
         <select className="field" value={props.subject} onChange={(event) => props.onSubjectChange(event.target.value as Subject)}>
           <option value="MATHS">Maths</option><option value="ENGLISH">English</option><option value="VERBAL_REASONING">Verbal Reasoning</option><option value="NON_VERBAL_REASONING">Non-Verbal Reasoning</option>
         </select>
-        <select className="field" value={props.topic} onChange={(event) => props.onTopicChange(event.target.value)}>
-          {props.topics.map((item) => <option key={item.slug} value={item.name}>{item.name}</option>)}
-        </select>
-        <MultiSelect title="Subtopics, multi-select allowed" values={props.visibleSubTopics} selected={props.selectedSubTopics} onToggle={props.onSubTopicToggle} />
+        <MultiSelect title="Topics, multi-select allowed" values={props.topics.map((item) => item.name)} selected={props.selectedTopics} onToggle={props.onTopicToggle} />
+        <MultiSelect title="Subtopics from selected topics" values={props.visibleSubTopics} selected={props.selectedSubTopics} onToggle={props.onSubTopicToggle} />
         <div className="grid gap-3 md:grid-cols-2">
           <MultiSelect title="Difficulty mix" values={["EASY", "MEDIUM", "HARD", "ADVANCED"] as Difficulty[]} selected={props.selectedDifficulties} onToggle={props.onDifficultyToggle} />
           <MultiSelect title="Question type mix" values={["MULTIPLE_CHOICE", "SHORT_ANSWER"] as QuestionType[]} selected={props.selectedQuestionTypes} onToggle={props.onQuestionTypeToggle} format={(value) => value.replaceAll("_", " ")} />

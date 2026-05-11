@@ -54,15 +54,15 @@ export function AuthPanel() {
     <section id="auth" className="surface w-full max-w-md rounded-lg p-5">
       <div className="mb-6 flex items-start justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="rounded-md bg-teal p-2 text-white shadow-sm">
+          <div className="gradient-button rounded-md p-2 text-white">
             <GraduationCap size={24} />
           </div>
           <div>
-            <h2 className="text-xl font-black">Sign in</h2>
+            <h2 className="text-xl font-extrabold">Sign in</h2>
             <p className="text-sm text-ink/60">Create a verified parent account or sign in.</p>
           </div>
         </div>
-        <div className="rounded-full bg-gold/15 px-2.5 py-1 text-xs font-extrabold text-gold">11+</div>
+        <div className="rounded-full bg-gold/15 px-2.5 py-1 text-xs font-bold text-gold">11+</div>
       </div>
 
       <div className="mb-4 grid grid-cols-2 gap-1 rounded-md border border-line bg-paper p-1">
@@ -93,14 +93,14 @@ export function AuthPanel() {
         )}
         {error && <p className="rounded-md bg-coral/10 p-3 text-sm font-semibold text-coral">{error}</p>}
         {notice && <p className="rounded-md bg-teal/10 p-3 text-sm font-semibold text-teal">{notice}</p>}
-        <Button className="w-full" disabled={loading}>
+        <Button className="gradient-button w-full border-0" disabled={loading}>
           {mode === "login" ? <LogIn size={18} /> : <UserPlus size={18} />}
           {loading ? "Working..." : mode === "login" ? "Sign in" : "Create account"}
           <ArrowRight size={18} />
         </Button>
       </form>
 
-      <div className="mt-5 rounded-md border border-line bg-skysoft p-3 text-sm text-ink">
+      <div className="mt-5 rounded-md border border-teal/15 bg-white/70 p-3 text-sm text-ink shadow-sm">
         <div className="flex items-center gap-2 font-bold text-teal">
           <GraduationCap size={24} />
           Account security

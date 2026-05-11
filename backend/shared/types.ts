@@ -140,6 +140,7 @@ export type QuestionGenerationJob = {
   count: number;
   microTopic: string;
   topic?: string;
+  topics?: string[];
   subTopics?: string[];
   difficulties?: Difficulty[];
   questionTypes?: QuestionType[];
@@ -168,6 +169,7 @@ export type QuestionGenerationSchedule = {
   count: number;
   microTopic: string;
   topic?: string;
+  topics?: string[];
   subTopics?: string[];
   difficulties?: Difficulty[];
   questionTypes?: QuestionType[];

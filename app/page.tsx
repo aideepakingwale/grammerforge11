@@ -1,108 +1,136 @@
-import { Activity, BarChart3, BookOpenCheck, DatabaseZap, LockKeyhole, ShieldCheck, Sparkles, Timer, TrendingUp } from "lucide-react";
+import { Activity, ArrowRight, BarChart3, BookOpenCheck, DatabaseZap, LockKeyhole, ShieldCheck, Sparkles, Timer, TrendingUp, Wand2 } from "lucide-react";
 import { AuthPanel } from "@/frontend/features/auth/auth-panel";
 
 const features = [
-  ["Hybrid generation", "95% question-bank retrieval with free-tier Gemini/Groq fallback.", Sparkles],
-  ["Secure exam mode", "Fullscreen, focus monitoring, autosave, audit logs, server timer fields.", ShieldCheck],
-  ["Timed exam engine", "Sequential navigation, review flags, live countdown, instant marking.", Timer],
-  ["Parent analytics", "Subject trends, topic breakdowns, cached AI plans, SaaS tier gates.", TrendingUp]
+  ["Hybrid question engine", "Question-bank first, Gemini/Groq fallback, structured imports, and quota-aware generation.", Wand2],
+  ["Secure exam mode", "Fullscreen, focus monitoring, autosave, audit logs, and server-aligned timer controls.", ShieldCheck],
+  ["Parent intelligence", "Subject trends, topic breakdowns, readiness charts, AI plans, and subscription gates.", TrendingUp],
+  ["Student motivation", "Rewards, badges, encouraging coaching, and targeted quick quizzes for every learner.", Sparkles]
 ];
 
 const previewRows = [
-  ["Maths", "Fractions", "82%", "Up 14%"],
-  ["English", "Inference", "76%", "Focus"],
-  ["Verbal", "Anagrams", "91%", "Strong"]
+  ["Maths", "Fractions", "82%", "Up 14%", "bg-teal/10 text-teal"],
+  ["English", "Inference", "76%", "Focus", "bg-gold/10 text-gold"],
+  ["NVR", "Rotation", "91%", "Strong", "bg-moss/10 text-moss"]
+];
+
+const stats = [
+  ["24", "exams completed", BookOpenCheck, "text-teal"],
+  ["42m", "average pace", Timer, "text-gold"],
+  ["98%", "integrity score", LockKeyhole, "text-coral"]
 ];
 
 export default function Home() {
   return (
-    <main className="app-shell min-h-screen overflow-hidden">
-      <nav className="mx-auto flex max-w-7xl items-center justify-between px-5 py-5">
-        <div className="flex items-center gap-3">
-          <div className="rounded-md bg-teal p-2 text-white shadow-sm"><Sparkles size={20} /></div>
-          <span className="text-lg font-black">GrammarForge 11+</span>
-        </div>
-        <div className="hidden items-center gap-2 md:flex">
-          <span className="chip"><DatabaseZap size={14} /> Supabase-ready</span>
-          <span className="chip"><Activity size={14} /> AI cached</span>
-          <a href="#auth" className="inline-flex min-h-10 items-center rounded-md bg-teal px-4 text-sm font-black text-white shadow-sm transition hover:bg-[#1b5aa6]">Try demo</a>
-        </div>
-      </nav>
-
-      <section className="mx-auto grid w-full max-w-7xl items-center gap-8 px-5 pb-8 pt-3 lg:min-h-[calc(100vh-5rem)] lg:grid-cols-[1fr_460px]">
-        <div>
-          <p className="eyebrow mb-3">Zero-cost startup architecture</p>
-          <h1 className="max-w-4xl text-3xl font-black leading-[1.08] text-ink sm:text-5xl md:text-6xl">
-            AI-guided 11+ practice, built like a premium exam platform.
-          </h1>
-          <p className="mt-5 max-w-2xl text-lg leading-8 text-ink/68">
-            A full-stack 11+ Grammar School preparation platform with AI question support, proctored exams,
-            role-based dashboards, Stripe-ready subscriptions, and cache-first analytics.
-          </p>
-          <div className="mt-6 flex flex-wrap gap-3">
-            <span className="chip">Vercel</span>
-            <span className="chip">Supabase / Neon</span>
-            <span className="chip">Upstash Redis</span>
-            <span className="chip">Gemini / Groq</span>
-            <span className="chip">Stripe</span>
+    <main className="app-shell hero-shell min-h-screen overflow-hidden">
+      <div className="hero-inner">
+        <nav className="mx-auto flex max-w-7xl items-center justify-between px-5 py-5">
+          <div className="floating-nav flex w-full items-center justify-between rounded-lg px-3 py-3 md:px-4">
+            <div className="flex items-center gap-3">
+              <div className="rounded-md bg-teal p-2 text-white shadow-sm"><Sparkles size={20} /></div>
+              <span className="text-lg font-extrabold">GrammarForge 11+</span>
+            </div>
+            <div className="hidden items-center gap-2 md:flex">
+              <span className="chip"><DatabaseZap size={14} /> Neon-ready</span>
+              <span className="chip"><Activity size={14} /> AI cached</span>
+              <a href="#auth" className="gradient-button inline-flex min-h-10 items-center gap-2 rounded-md px-4 text-sm font-black text-white transition">
+                Start <ArrowRight size={16} />
+              </a>
+            </div>
           </div>
-        </div>
-        <div className="space-y-4">
-          <div className="glass-rail hero-preview-grid rounded-lg p-4">
-            <div className="mb-4 flex items-center justify-between">
-              <div>
-                <p className="eyebrow">Live progress</p>
-                <h2 className="mt-1 text-xl font-black">Devansh Ingwale</h2>
-              </div>
-              <div className="rounded-md bg-skysoft p-2 text-teal"><BarChart3 size={22} /></div>
+        </nav>
+
+        <section className="mx-auto grid w-full max-w-7xl items-start gap-8 px-5 pb-10 pt-6 lg:grid-cols-[1fr_460px]">
+          <div className="pt-4 lg:pt-10">
+            <div className="mb-5 inline-flex rounded-full border border-teal/15 bg-white/70 px-3 py-1 text-xs font-bold uppercase text-teal shadow-sm">
+              AI-powered 11+ preparation for UK Grammar exams
             </div>
-            <div className="grid grid-cols-3 gap-3">
-              <div className="premium-card p-3">
-                <BookOpenCheck className="text-teal" size={20} />
-                <p className="mt-3 text-2xl font-black">24</p>
-                <p className="text-xs font-bold text-ink/55">exams</p>
-              </div>
-              <div className="premium-card p-3">
-                <Timer className="text-gold" size={20} />
-                <p className="mt-3 text-2xl font-black">42m</p>
-                <p className="text-xs font-bold text-ink/55">avg pace</p>
-              </div>
-              <div className="premium-card p-3">
-                <LockKeyhole className="text-coral" size={20} />
-                <p className="mt-3 text-2xl font-black">98%</p>
-                <p className="text-xs font-bold text-ink/55">integrity</p>
-              </div>
+            <h1 className="max-w-5xl text-4xl font-extrabold leading-[1.08] text-ink sm:text-5xl md:text-6xl">
+              Turn every practice paper into a clear path to improvement.
+            </h1>
+            <p className="mt-5 max-w-2xl text-lg font-medium leading-8 text-ink/68">
+              A premium SaaS platform for 11+ exam practice with realistic papers, parent analytics,
+              gamified student progress, AI-assisted explanations, and zero-cost startup cloud architecture.
+            </p>
+            <div className="mt-7 flex flex-wrap gap-3">
+              <a href="#auth" className="gradient-button inline-flex min-h-11 items-center gap-2 rounded-md px-5 text-sm font-black text-white transition">
+                Launch dashboard <ArrowRight size={17} />
+              </a>
+              <span className="inline-flex min-h-11 items-center rounded-md border border-line bg-white/80 px-4 text-sm font-bold text-ink shadow-sm">Inspired by Deepak, created for Devansh, built for every 11+ family</span>
             </div>
-            <div className="mt-4 space-y-2">
-              {previewRows.map(([subject, topic, score, status]) => (
-                <div key={subject} className="flex items-center justify-between rounded-md border border-line bg-white px-3 py-2 text-sm shadow-sm">
-                  <div>
-                    <p className="font-black">{subject}</p>
-                    <p className="text-xs font-bold text-ink/50">{topic}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-black">{score}</p>
-                    <p className="text-xs font-bold text-teal">{status}</p>
-                  </div>
-                </div>
+            <div className="mt-7 flex flex-wrap gap-2">
+              {["Vercel", "Neon / Supabase", "Upstash Redis", "Gemini + Groq", "Stripe", "Brevo"].map((item) => (
+                <span key={item} className="chip">{item}</span>
               ))}
             </div>
           </div>
-          <AuthPanel />
-        </div>
-      </section>
 
-      <section className="mx-auto grid max-w-7xl gap-3 px-5 pb-10 md:grid-cols-2 lg:grid-cols-4">
-        {features.map(([title, copy, Icon]) => (
-          <div key={title as string} className="premium-card p-4">
-            <div className="mb-3 inline-flex rounded-md bg-teal/10 p-2 text-teal">
-              <Icon size={22} />
+          <div className="space-y-4">
+            <div className="glass-rail hero-preview-grid rounded-lg p-4">
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <p className="eyebrow">Live learning cockpit</p>
+                  <h2 className="mt-1 text-2xl font-extrabold">Devansh Ingwale</h2>
+                </div>
+                <div className="rounded-md bg-skysoft p-2 text-teal"><BarChart3 size={22} /></div>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                {stats.map(([value, label, Icon, color]) => (
+                  <div key={label as string} className="bento-card p-3">
+                    <Icon className={color as string} size={20} />
+                    <p className="mt-3 text-2xl font-extrabold">{value as string}</p>
+                    <p className="text-xs font-bold text-ink/55">{label as string}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 space-y-2">
+                {previewRows.map(([subject, topic, score, status, tone]) => (
+                  <div key={subject} className="flex items-center justify-between rounded-md border border-line bg-white/86 px-3 py-2 text-sm shadow-sm">
+                    <div>
+                      <p className="font-extrabold">{subject}</p>
+                      <p className="text-xs font-bold text-ink/50">{topic}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-extrabold">{score}</p>
+                      <p className={`rounded px-2 py-0.5 text-xs font-black ${tone}`}>{status}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-            <h2 className="font-black">{title as string}</h2>
-            <p className="mt-1 text-sm leading-6 text-ink/62">{copy as string}</p>
+            <AuthPanel />
           </div>
-        ))}
-      </section>
+        </section>
+
+        <section className="mx-auto grid max-w-7xl gap-4 px-5 pb-12 md:grid-cols-2 lg:grid-cols-4">
+          {features.map(([title, copy, Icon]) => (
+            <div key={title as string} className="bento-card p-5">
+              <div className="mb-4 inline-flex rounded-md bg-teal/10 p-2 text-teal">
+                <Icon size={22} />
+              </div>
+              <h2 className="text-lg font-extrabold">{title as string}</h2>
+              <p className="mt-2 text-sm leading-6 text-ink/62">{copy as string}</p>
+            </div>
+          ))}
+        </section>
+
+        <section className="mx-auto max-w-7xl px-5 pb-12">
+          <div className="soft-panel grid gap-5 rounded-lg p-5 md:grid-cols-[1fr_1fr_1fr]">
+            <div>
+              <p className="eyebrow">From bank to insight</p>
+              <h2 className="mt-2 text-2xl font-extrabold">One flow for exams, review, and growth.</h2>
+            </div>
+            <div className="rounded-md bg-white/80 p-4 shadow-sm">
+              <p className="text-3xl font-black text-teal">95%</p>
+              <p className="mt-1 text-sm font-bold text-ink/60">question-bank retrieval to protect free-tier AI quota.</p>
+            </div>
+            <div className="rounded-md bg-white/80 p-4 shadow-sm">
+              <p className="text-3xl font-black text-moss">4</p>
+              <p className="mt-1 text-sm font-bold text-ink/60">configurable tiers: Foundation, Alpha, Velocity, Apex.</p>
+            </div>
+          </div>
+        </section>
+      </div>
     </main>
   );
 }

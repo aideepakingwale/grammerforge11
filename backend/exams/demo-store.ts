@@ -319,6 +319,7 @@ type QuestionGenerationInput = {
   count: number;
   microTopic: string;
   topic?: string;
+  topics?: string[];
   subTopics?: string[];
   difficulties?: Difficulty[];
   questionTypes?: QuestionType[];
@@ -345,7 +346,8 @@ export async function runQuestionGeneration(input: QuestionGenerationInput) {
     questionType: input.questionType,
     count: input.count,
     microTopic: generationPlan.map((item) => item.subTopic).join(", "),
-    topic: input.topic,
+    topic: input.topics?.length ? input.topics.join(", ") : input.topic,
+    topics: input.topics,
     subTopics: generationPlan.map((item) => item.subTopic),
     generationPlan,
     provider: input.provider,
@@ -439,8 +441,10 @@ export async function runScheduledQuestionGenerationNow() {
 function buildQuestionGenerationPlan(input: QuestionGenerationInput): QuestionGenerationPlanItem[] {
   const requestedSubTopics = input.subTopics?.map((item) => item.trim()).filter(Boolean) ?? [];
   const topicGroups = syllabusRegistry[input.subject];
-  const selectedTopics = input.topic
-    ? topicGroups.filter((topic) => topic.name === input.topic || topic.slug === input.topic)
+  const requestedTopics = input.topics?.length ? input.topics : input.topic ? [input.topic] : [];
+  const normalizedRequestedTopics = requestedTopics.map((item) => item.trim().toLowerCase()).filter(Boolean);
+  const selectedTopics = normalizedRequestedTopics.length
+    ? topicGroups.filter((topic) => normalizedRequestedTopics.includes(topic.name.toLowerCase()) || normalizedRequestedTopics.includes(topic.slug.toLowerCase()))
     : topicGroups;
   const pool = (selectedTopics.length ? selectedTopics : topicGroups).flatMap((topic) => {
     const subTopics = requestedSubTopics.length
@@ -603,6 +607,7 @@ function buildLlmQuestionPrompt(input: QuestionGenerationInput, generationPlan: 
     "For English comprehension, include the passage in stimulus and never omit it.",
     "Questions must be age-appropriate, unambiguous, original, and suitable for timed 11+ exam practice.",
     `Subject: ${input.subject}.`,
+    `Topics selected: ${(input.topics?.length ? input.topics : input.topic ? [input.topic] : ["All syllabus topics"]).join(", ")}.`,
     `Question types selected: ${(input.questionTypes?.length ? input.questionTypes : [input.questionType]).join(", ")}.`,
     `Difficulty levels selected: ${(input.difficulties?.length ? input.difficulties : [input.difficulty]).join(", ")}.`,
     `Total count: ${input.count}.`,
