@@ -239,6 +239,9 @@ model QuestionMaster {
   estimatedSeconds Int?             @map("estimated_seconds")
   marksAvailable   Decimal          @default(1) @map("marks_available") @db.Decimal(5, 2)
   scoringWeight     Decimal          @default(1) @map("scoring_weight") @db.Decimal(5, 2)
+  contentHash       String?          @map("content_hash") @db.VarChar(64)
+  semanticHash      String?          @map("semantic_hash") @db.VarChar(64)
+  duplicateGroupKey String?          @map("duplicate_group_key") @db.VarChar(64)
   curriculumTag    String?          @map("curriculum_tag") @db.VarChar(120)
   source           String           @default("question_master") @db.VarChar(80)
   isActive         Boolean          @default(true) @map("is_active")
@@ -253,6 +256,9 @@ model QuestionMaster {
   @@index([subjectType, microTopic])
   @@index([syllabusTopicSlug])
   @@index([questionType])
+  @@unique([contentHash])
+  @@index([semanticHash])
+  @@index([duplicateGroupKey])
   @@map("question_master")
 }
 

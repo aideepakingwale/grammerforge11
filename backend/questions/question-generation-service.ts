@@ -9,7 +9,7 @@ import { callQuestionGenerationLlm } from "@/backend/questions/llm-question-clie
 import { buildQuestionGenerationPlan } from "@/backend/questions/generation-planner";
 import { buildLlmQuestionPrompt } from "@/backend/questions/question-prompt-builder";
 import type { GeneratedQuestionResult, QuestionGenerationInput, QuestionGenerationPlanItem } from "@/backend/questions/question-generation-types";
-import { questionBankStatsFromDatabase, saveQuestionsToQuestionMaster } from "@/backend/questions/question-master-repository";
+import { filterUniqueQuestions, questionBankStatsFromDatabase, saveQuestionsToQuestionMaster } from "@/backend/questions/question-master-repository";
 
 export type { QuestionGenerationInput, QuestionGenerationPlanItem } from "@/backend/questions/question-generation-types";
 export { buildQuestionGenerationPlan } from "@/backend/questions/generation-planner";
@@ -142,18 +142,22 @@ export async function runQuestionGeneration(input: QuestionGenerationInput) {
 
   try {
     const generated = await generateAdminQuestions(input, generationPlan);
-    questionBank.push(...generated.questions);
-    await saveQuestionsToQuestionMaster(generated.questions, input.provider === "INTERNAL" ? "admin_internal_generation" : "admin_llm_generation");
+    const unique = await filterUniqueQuestions(generated.questions);
+    const acceptedQuestions = unique.accepted.map((candidate) => candidate.question);
+    questionBank.push(...acceptedQuestions);
+    const persistence = await saveQuestionsToQuestionMaster(acceptedQuestions, input.provider === "INTERNAL" ? "admin_internal_generation" : "admin_llm_generation");
     job.status = "COMPLETED";
-    job.generatedCount = generated.questions.length;
+    job.generatedCount = acceptedQuestions.length;
+    job.error = unique.rejected.length ? `${unique.rejected.length} duplicate question(s) were rejected before saving.` : undefined;
     job.completedAt = new Date().toISOString();
     addAuditLog("admin_question_generation", "QUESTION_FLAGGED", {
       jobId: job.id,
       subject: input.subject,
-      count: generated.questions.length,
+      count: acceptedQuestions.length,
       provider: input.provider,
       mode: input.mode
     });
+    return { job, stats: await questionBankStatsLive(), duplicateReport: { rejected: unique.rejected, persistence } };
   } catch (error) {
     job.status = "FAILED";
     job.error = error instanceof Error ? error.message : "Question generation failed";
@@ -177,11 +181,16 @@ export async function generateQuestionCandidates(input: QuestionGenerationInput 
     ? await generateAdminQuestionsWithPrompt(input, generationPlan, input.promptOverride.trim())
     : await generateAdminQuestions(input, generationPlan);
 
+  const unique = await filterUniqueQuestions(result.questions);
   return {
     generationPlan,
     prompt: input.promptOverride?.trim() || buildLlmQuestionPrompt(input, generationPlan),
-    questions: result.questions.map((question) => ({ ...question, id: uid("q_candidate") })),
-    generationMeta: result.meta,
+    questions: unique.evaluated.map((candidate) => ({
+      ...candidate.question,
+      id: uid("q_candidate"),
+      uniqueness: candidate.uniqueness
+    })),
+    generationMeta: { ...result.meta, duplicateRejectedCount: unique.rejected.length, duplicateRejections: unique.rejected },
     llmQuota: llmQuotaSnapshot(),
     stats: await questionBankStatsLive()
   };
@@ -192,26 +201,29 @@ export async function importGeneratedQuestions(questions: Question[]) {
     ...enrichQuestionSyllabus(question),
     id: uid("q_admin_import")
   }));
-  questionBank.push(...imported);
-  const persistence = await saveQuestionsToQuestionMaster(imported, "admin_import");
+  const unique = await filterUniqueQuestions(imported);
+  const acceptedQuestions = unique.accepted.map((candidate) => candidate.question);
+  questionBank.push(...acceptedQuestions);
+  const persistence = await saveQuestionsToQuestionMaster(acceptedQuestions, "admin_import");
   const job: QuestionGenerationJob = {
     id: uid("qgen_import"),
-    subject: imported[0]?.subjectType ?? "MATHS",
-    difficulty: imported[0]?.difficultyLevel ?? "MEDIUM",
-    questionType: imported[0]?.questionType ?? "MULTIPLE_CHOICE",
+    subject: acceptedQuestions[0]?.subjectType ?? imported[0]?.subjectType ?? "MATHS",
+    difficulty: acceptedQuestions[0]?.difficultyLevel ?? imported[0]?.difficultyLevel ?? "MEDIUM",
+    questionType: acceptedQuestions[0]?.questionType ?? imported[0]?.questionType ?? "MULTIPLE_CHOICE",
     count: imported.length,
-    microTopic: Array.from(new Set(imported.map((question) => question.microTopic))).join(", ") || "Admin import",
-    topic: imported[0]?.topic,
-    subTopics: Array.from(new Set(imported.map((question) => question.microTopic))),
+    microTopic: Array.from(new Set(acceptedQuestions.map((question) => question.microTopic))).join(", ") || "Admin import",
+    topic: acceptedQuestions[0]?.topic ?? imported[0]?.topic,
+    subTopics: Array.from(new Set(acceptedQuestions.map((question) => question.microTopic))),
     provider: "INTERNAL",
-    status: "COMPLETED",
+    status: acceptedQuestions.length ? "COMPLETED" : "FAILED",
     mode: "ON_DEMAND",
     createdAt: new Date().toISOString(),
     completedAt: new Date().toISOString(),
-    generatedCount: imported.length
+    generatedCount: acceptedQuestions.length,
+    error: unique.rejected.length ? `${unique.rejected.length} duplicate question(s) rejected.` : undefined
   };
   store().questionGenerationJobs.push(job);
-  return { imported, persistence, job, stats: await questionBankStatsLive() };
+  return { imported: acceptedQuestions, rejected: unique.rejected, persistence, job, stats: await questionBankStatsLive() };
 }
 
 export async function runScheduledQuestionGenerationNow() {

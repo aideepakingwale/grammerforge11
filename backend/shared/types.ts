@@ -72,6 +72,13 @@ export type LlmGenerationMeta = {
     candidatesTokenCount?: number;
     totalTokenCount?: number;
   };
+  duplicateRejectedCount?: number;
+  duplicateRejections?: Array<{
+    questionId: string;
+    reason: string;
+    topic?: string;
+    microTopic: string;
+  }>;
 };
 
 export type PlanFeatureKey =
@@ -222,6 +229,17 @@ export type Question = {
   estimatedSeconds?: number;
   marksAvailable?: number;
   scoringWeight?: number;
+};
+
+export type QuestionUniquenessStatus = {
+  isUnique: boolean;
+  reason?: string;
+  contentHash?: string;
+  semanticHash?: string;
+};
+
+export type QuestionCandidate = Question & {
+  uniqueness: QuestionUniquenessStatus;
 };
 
 export type ExamQuestion = {

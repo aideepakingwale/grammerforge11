@@ -8,8 +8,8 @@ import type {
   Difficulty,
   LlmGenerationMeta,
   PlatformConfig,
-  Question,
   QuestionBankStats,
+  QuestionCandidate,
   QuestionGenerationJob,
   QuestionGenerationSchedule,
   QuestionType,
@@ -37,7 +37,7 @@ export function QuestionsPanel({ initial, mutate }: Props) {
   const [count, setCount] = useState(10);
   const [provider, setProvider] = useState<"GEMINI" | "GROQ" | "INTERNAL">("GEMINI");
   const [prompt, setPrompt] = useState("");
-  const [candidates, setCandidates] = useState<Question[]>([]);
+  const [candidates, setCandidates] = useState<QuestionCandidate[]>([]);
   const [selectedQuestionIds, setSelectedQuestionIds] = useState<string[]>([]);
   const [generationMeta, setGenerationMeta] = useState<LlmGenerationMeta | null>(null);
   const [working, setWorking] = useState("");
@@ -123,12 +123,12 @@ export function QuestionsPanel({ initial, mutate }: Props) {
     if (!response.ok) return setLocalError(json.error ?? "Could not generate questions");
     setPrompt(json.prompt);
     setCandidates(json.questions ?? []);
-    setSelectedQuestionIds((json.questions ?? []).map((question: Question) => question.id));
+    setSelectedQuestionIds((json.questions ?? []).filter((question: QuestionCandidate) => question.uniqueness?.isUnique).map((question: QuestionCandidate) => question.id));
     setGenerationMeta(json.generationMeta ?? null);
   }
 
   async function importSelected() {
-    const questions = candidates.filter((question) => selectedQuestionIds.includes(question.id));
+    const questions = candidates.filter((question) => question.uniqueness?.isUnique && selectedQuestionIds.includes(question.id));
     if (!questions.length) return setLocalError("Select at least one generated question to import.");
     setWorking("import");
     setLocalError("");
@@ -265,20 +265,30 @@ function PromptApproval({ prompt, setPrompt, working, generateCandidates, localE
   );
 }
 
-function GeneratedReview({ candidates, selectedQuestionIds, generationMeta, toggleQuestion, importSelected, working }: { candidates: Question[]; selectedQuestionIds: string[]; generationMeta: LlmGenerationMeta | null; toggleQuestion: (id: string) => void; importSelected: () => Promise<void>; working: string }) {
+function GeneratedReview({ candidates, selectedQuestionIds, generationMeta, toggleQuestion, importSelected, working }: { candidates: QuestionCandidate[]; selectedQuestionIds: string[]; generationMeta: LlmGenerationMeta | null; toggleQuestion: (id: string) => void; importSelected: () => Promise<void>; working: string }) {
+  const uniqueCount = candidates.filter((question) => question.uniqueness?.isUnique).length;
   return (
     <div className="premium-card p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div><h2 className="text-xl font-black">Generated question review</h2><p className="mt-1 text-sm font-semibold text-ink/55">Select questions to import into the master question bank.</p></div>
+        <div><h2 className="text-xl font-black">Generated question review</h2><p className="mt-1 text-sm font-semibold text-ink/55">{uniqueCount} unique candidate(s) can be imported. Duplicates are shown for audit but locked.</p></div>
         <Button type="button" onClick={() => void importSelected()} disabled={working === "import"}><Save size={16} /> Import selected ({selectedQuestionIds.length})</Button>
       </div>
       {generationMeta && <GenerationMetaPanel meta={generationMeta} />}
       <div className="mt-4 space-y-3">
-        {candidates.map((question, index) => (
-          <div key={question.id} className="rounded-md border border-ink/10 bg-white p-4">
+        {candidates.map((question, index) => {
+          const isUnique = question.uniqueness?.isUnique ?? true;
+          return (
+          <div key={question.id} className={`rounded-md border p-4 ${isUnique ? "border-moss/30 bg-white" : "border-coral/25 bg-coral/5"}`}>
             <label className="flex items-start gap-3">
-              <input className="mt-1 h-5 w-5 accent-teal" type="checkbox" checked={selectedQuestionIds.includes(question.id)} onChange={() => toggleQuestion(question.id)} />
-              <span><span className="font-black">Question {index + 1}: {question.topic} / {question.microTopic}</span><span className="mt-1 block text-sm font-semibold text-ink/60">{question.instruction}</span></span>
+              <input className="mt-1 h-5 w-5 accent-teal disabled:cursor-not-allowed disabled:opacity-40" type="checkbox" disabled={!isUnique} checked={isUnique && selectedQuestionIds.includes(question.id)} onChange={() => toggleQuestion(question.id)} />
+              <span className="flex-1">
+                <span className="flex flex-wrap items-center gap-2">
+                  <span className="font-black">Question {index + 1}: {question.topic} / {question.microTopic}</span>
+                  <UniquenessBadge uniqueness={question.uniqueness} />
+                </span>
+                <span className="mt-1 block text-sm font-semibold text-ink/60">{question.instruction}</span>
+                {!isUnique && <span className="mt-2 block rounded-md bg-coral/10 p-2 text-xs font-bold text-coral">Rejected from import: {question.uniqueness?.reason ?? "Duplicate question"}</span>}
+              </span>
             </label>
             {question.stimulus && <div className="mt-3 rounded-md bg-paper p-3"><p className="text-xs font-black uppercase text-ink/45">{question.stimulus.title}</p><QuestionVisual payload={question.stimulus} /></div>}
             <div className="mt-3 font-semibold"><QuestionVisual payload={question.questionData} /></div>
@@ -288,10 +298,17 @@ function GeneratedReview({ candidates, selectedQuestionIds, generationMeta, togg
               <p className="mt-1 leading-6 text-ink/70">{question.explanation}</p>
             </div>
           </div>
-        ))}
+        );})}
       </div>
     </div>
   );
+}
+
+function UniquenessBadge({ uniqueness }: { uniqueness?: QuestionCandidate["uniqueness"] }) {
+  if (!uniqueness || uniqueness.isUnique) {
+    return <span className="rounded-full bg-moss/10 px-2.5 py-1 text-xs font-black uppercase text-moss">Unique</span>;
+  }
+  return <span className="rounded-full bg-coral/10 px-2.5 py-1 text-xs font-black uppercase text-coral">Duplicate</span>;
 }
 
 function QuestionVisual({ payload }: { payload: { mode: string; content: string; caption?: string } }) {
@@ -323,6 +340,7 @@ function GenerationMetaPanel({ meta }: { meta: LlmGenerationMeta }) {
       <div><p className="text-xs font-black uppercase text-teal">Questions</p><p className="mt-1 font-black">{meta.requestedCount} requested</p><p className="text-xs font-semibold text-ink/55">{meta.llmReturnedCount} LLM, {meta.fallbackCount} fallback</p></div>
       {meta.groq && <><div><p className="text-xs font-black uppercase text-teal">Groq requests</p><p className="mt-1 font-black">{meta.groq.remainingRequests ?? "-"} remaining</p><p className="text-xs font-semibold text-ink/55">limit {meta.groq.limitRequests ?? "-"}, reset {meta.groq.resetRequests ?? "-"}</p></div><div><p className="text-xs font-black uppercase text-teal">Groq tokens</p><p className="mt-1 font-black">{meta.groq.remainingTokens ?? "-"} remaining</p><p className="text-xs font-semibold text-ink/55">limit {meta.groq.limitTokens ?? "-"}, reset {meta.groq.resetTokens ?? "-"}</p></div></>}
       {meta.gemini && <><div><p className="text-xs font-black uppercase text-teal">Gemini tokens</p><p className="mt-1 font-black">{meta.gemini.totalTokenCount ?? "-"} used</p><p className="text-xs font-semibold text-ink/55">prompt {meta.gemini.promptTokenCount ?? "-"}, answer {meta.gemini.candidatesTokenCount ?? "-"}</p></div><div><p className="text-xs font-black uppercase text-teal">Gemini quota</p><p className="mt-1 font-black">Tracked app-side</p><p className="text-xs font-semibold text-ink/55">Exact remaining quota is checked in Google AI Studio.</p></div></>}
+      {Boolean(meta.duplicateRejectedCount) && <div className="md:col-span-4 rounded-md border border-coral/20 bg-coral/10 p-3"><p className="text-sm font-black text-coral">{meta.duplicateRejectedCount} duplicate candidate(s) removed before review.</p><p className="mt-1 text-xs font-semibold text-ink/60">The uniqueness filter checks this batch, the starter question bank, and the database question master.</p></div>}
     </div>
   );
 }

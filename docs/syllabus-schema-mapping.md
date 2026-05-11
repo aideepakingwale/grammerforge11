@@ -380,7 +380,7 @@ The report should produce:
 | `backend/syllabus/registry.ts` | Internal syllabus taxonomy and question enrichment |
 | `backend/exams/exam-patterns.ts` | Subject-level exam patterns and timings |
 | `backend/analytics/performance.ts` | Subject/topic scoring and readiness bands |
-| `backend/exams/demo-store.ts` | Demo exam creation, pattern-based selection, scoring |
+| `backend/exams/exam-service.ts` | Demo exam creation, pattern-based selection, scoring |
 | `backend/ai/insights.ts` | Parent and student insight generation inputs |
 | `frontend/features/dashboard/parent-dashboard.tsx` | Parent dashboard charts and readiness signals |
 | `database/prisma/schema.prisma` | Production relational schema |

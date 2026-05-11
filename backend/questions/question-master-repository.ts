@@ -1,6 +1,8 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/backend/db/prisma";
 import type { Question, QuestionBankStats } from "@/backend/shared/types";
+import { questionBank } from "@/backend/questions/question-bank";
+import { fingerprintQuestion } from "@/backend/questions/question-fingerprint";
 
 const emptySubjectStats = {
   MATHS: 0,
@@ -68,8 +70,9 @@ export async function saveQuestionsToQuestionMaster(questions: Question[], sourc
   }
 
   try {
+    const unique = await filterUniqueQuestions(questions, { includeStarterBank: false });
     await prisma.questionMaster.createMany({
-      data: questions.map((question) => ({
+      data: unique.accepted.map(({ question, fingerprint }) => ({
         subjectType: question.subjectType,
         topic: question.topic ?? question.microTopic,
         syllabusTopicSlug: question.syllabusTopicSlug ?? slugify(question.topic ?? question.microTopic),
@@ -94,16 +97,129 @@ export async function saveQuestionsToQuestionMaster(questions: Question[], sourc
         estimatedSeconds: question.estimatedSeconds,
         marksAvailable: question.marksAvailable ?? 1,
         scoringWeight: question.scoringWeight ?? 1,
+        contentHash: fingerprint.contentHash,
+        semanticHash: fingerprint.semanticHash,
+        duplicateGroupKey: fingerprint.semanticHash,
         curriculumTag: "UK 11+ Grammar",
         source,
         isActive: true
       })),
       skipDuplicates: true
     });
-    return { persisted: questions.length, skipped: 0 };
+    return {
+      persisted: unique.accepted.length,
+      skipped: unique.rejected.length,
+      duplicates: unique.rejected
+    };
   } catch (error) {
     throw new Error(databaseImportMessage(error));
   }
+}
+
+export async function filterUniqueQuestions(questions: Question[], options: { includeStarterBank?: boolean } = {}) {
+  const candidates = questions.map((question) => ({ question, fingerprint: fingerprintQuestion(question) }));
+  const includeStarterBank = options.includeStarterBank ?? true;
+  const existingMemoryHashes = includeStarterBank ? new Set(questionBank.map((question) => fingerprintQuestion(question).contentHash)) : new Set<string>();
+  const existingMemorySemanticHashes = includeStarterBank ? new Set(questionBank.map((question) => fingerprintQuestion(question).semanticHash)) : new Set<string>();
+  const seenContent = new Set<string>();
+  const seenSemantic = new Set<string>();
+  const rejected: Array<{ questionId: string; reason: string; topic?: string; microTopic: string }> = [];
+
+  const databaseHashes = await findExistingDatabaseHashes(candidates.map((candidate) => candidate.fingerprint));
+
+  const evaluated = candidates.map(({ question, fingerprint }) => {
+    const reason =
+      seenContent.has(fingerprint.contentHash) ? "Duplicate inside the generated batch" :
+      seenSemantic.has(fingerprint.semanticHash) ? "Near-duplicate inside the generated batch" :
+      databaseHashes.content.has(fingerprint.contentHash) ? "Already exists in question_master" :
+      databaseHashes.semantic.has(fingerprint.semanticHash) ? "Near-duplicate already exists in question_master" :
+      existingMemoryHashes.has(fingerprint.contentHash) ? "Already exists in the starter question bank" :
+      existingMemorySemanticHashes.has(fingerprint.semanticHash) ? "Near-duplicate already exists in the starter question bank" :
+      "";
+
+    seenContent.add(fingerprint.contentHash);
+    seenSemantic.add(fingerprint.semanticHash);
+
+    if (!reason) {
+      return { question, fingerprint, uniqueness: { isUnique: true, contentHash: fingerprint.contentHash, semanticHash: fingerprint.semanticHash } };
+    }
+    rejected.push({
+      questionId: question.id,
+      reason,
+      topic: question.topic,
+      microTopic: question.microTopic
+    });
+    return { question, fingerprint, uniqueness: { isUnique: false, reason, contentHash: fingerprint.contentHash, semanticHash: fingerprint.semanticHash } };
+  });
+
+  return { accepted: evaluated.filter((item) => item.uniqueness.isUnique), evaluated, rejected };
+}
+
+async function findExistingDatabaseHashes(fingerprints: Array<{ contentHash: string; semanticHash: string }>) {
+  const content = new Set<string>();
+  const semantic = new Set<string>();
+  if (!hasConfiguredQuestionDatabase() || !fingerprints.length) return { content, semantic };
+
+  const contentHashes = Array.from(new Set(fingerprints.map((fingerprint) => fingerprint.contentHash)));
+  const semanticHashes = Array.from(new Set(fingerprints.map((fingerprint) => fingerprint.semanticHash)));
+  const rows = await prisma.questionMaster.findMany({
+    where: {
+      OR: [
+        { contentHash: { in: contentHashes } },
+        { semanticHash: { in: semanticHashes } },
+        { contentHash: null },
+        { semanticHash: null }
+      ]
+    },
+    select: {
+      id: true,
+      subjectType: true,
+      questionType: true,
+      questionData: true,
+      stimulusData: true,
+      options: true,
+      answer: true,
+      explanation: true,
+      difficultyLevel: true,
+      topic: true,
+      microTopic: true,
+      syllabusTopicSlug: true,
+      examBoardTags: true,
+      skillTags: true,
+      estimatedSeconds: true,
+      marksAvailable: true,
+      scoringWeight: true,
+      contentHash: true,
+      semanticHash: true
+    }
+  });
+
+  rows.forEach((row) => {
+    const rowFingerprint = row.contentHash && row.semanticHash ? null : fingerprintQuestion({
+      id: row.id,
+      subjectType: row.subjectType,
+      questionType: row.questionType,
+      questionData: row.questionData as Question["questionData"],
+      stimulus: row.stimulusData as Question["stimulus"],
+      options: (row.options ?? []) as Question["options"],
+      answer: row.answer,
+      explanation: row.explanation ?? "",
+      difficultyLevel: row.difficultyLevel,
+      topic: row.topic,
+      microTopic: row.microTopic,
+      syllabusTopicSlug: row.syllabusTopicSlug,
+      examBoardTags: row.examBoardTags,
+      skillTags: row.skillTags,
+      estimatedSeconds: row.estimatedSeconds ?? undefined,
+      marksAvailable: Number(row.marksAvailable),
+      scoringWeight: Number(row.scoringWeight)
+    });
+    content.add(row.contentHash ?? rowFingerprint?.contentHash ?? "");
+    semantic.add(row.semanticHash ?? rowFingerprint?.semanticHash ?? "");
+  });
+  content.delete("");
+  semantic.delete("");
+  return { content, semantic };
 }
 
 function toJson(value: unknown): Prisma.InputJsonValue | undefined {

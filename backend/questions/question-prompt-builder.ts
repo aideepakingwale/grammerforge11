@@ -17,6 +17,8 @@ export function buildLlmQuestionPrompt(input: QuestionGenerationInput, generatio
     "For non-verbal reasoning, use clean SVG content for visual stimuli and options.",
     "For English comprehension, include the passage in stimulus and never omit it.",
     "Questions must be age-appropriate, unambiguous, original, and suitable for timed 11+ exam practice.",
+    "Avoid duplicates: do not reuse the same numbers, names, passage premise, answer pattern, SVG geometry, or wording across this batch.",
+    "If two questions test the same subtopic, make the scenario, values, correct answer, distractors, and explanation materially different.",
     `Subject: ${input.subject}.`,
     `Topics selected: ${(input.topics?.length ? input.topics : input.topic ? [input.topic] : ["All syllabus topics"]).join(", ")}.`,
     `Question type mix: ${questionTypeMix.join(", ")}.`,
