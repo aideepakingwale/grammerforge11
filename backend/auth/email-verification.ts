@@ -81,13 +81,14 @@ export async function sendVerificationEmail(input: { email: string; firstName: s
     </div>
   `;
 
-  if (process.env.BREVO_API_KEY) {
+  const brevoApiKey = process.env.BREVO_API_KEY?.trim();
+  if (brevoApiKey) {
     const from = parseEmailFrom(process.env.EMAIL_FROM!);
     const response = await fetch("https://api.brevo.com/v3/smtp/email", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "api-key": process.env.BREVO_API_KEY
+        "api-key": brevoApiKey
       },
       body: JSON.stringify({
         sender: from,
@@ -99,7 +100,9 @@ export async function sendVerificationEmail(input: { email: string; firstName: s
     });
 
     if (!response.ok) {
-      throw new Error("Verification email could not be sent through the configured Brevo API key.");
+      const body = await response.text().catch(() => "");
+      const detail = extractBrevoError(body);
+      throw new Error(`Verification email could not be sent through Brevo.${detail ? ` ${detail}` : ""}`);
     }
     return;
   }
@@ -136,4 +139,15 @@ function parseEmailFrom(value: string) {
     name: match[1].trim().replace(/^"|"$/g, ""),
     email: match[2].trim()
   };
+}
+
+function extractBrevoError(body: string) {
+  if (!body) return "";
+  try {
+    const parsed = JSON.parse(body) as { message?: string; code?: string };
+    const parts = [parsed.code, parsed.message].filter(Boolean);
+    return parts.length ? parts.join(": ") : "";
+  } catch {
+    return body.slice(0, 240);
+  }
 }
