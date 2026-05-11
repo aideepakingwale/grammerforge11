@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/cron/question-generation",
-      "schedule": "0 * * * *"
+      "schedule": "0 2 * * *"
     }
   ]
 }
