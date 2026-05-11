@@ -838,7 +838,32 @@ async function generateQuestionsWithConfiguredLlm(input: QuestionGenerationInput
   }
 }
 
+function llmProviderOrder(preferred: LlmProvider) {
+  const config = store().platformConfig;
+  const candidates: LlmProvider[] =
+    preferred === "INTERNAL"
+      ? []
+      : [
+          preferred,
+          preferred === "GEMINI" ? "GROQ" : "GEMINI"
+        ];
+  return candidates.filter((provider, index, list) => {
+    if (list.indexOf(provider) !== index) return false;
+    if (provider === "GEMINI") return config.geminiEnabled && Boolean(process.env.GEMINI_API_KEY);
+    if (provider === "GROQ") return config.groqEnabled && Boolean(process.env.GROQ_API_KEY);
+    return false;
+  });
+}
+
 async function callQuestionGenerationLlm(provider: LlmProvider, prompt: string) {
+  for (const candidate of llmProviderOrder(provider)) {
+    const text = await callSingleQuestionGenerationProvider(candidate, prompt);
+    if (text) return text;
+  }
+  return null;
+}
+
+async function callSingleQuestionGenerationProvider(provider: LlmProvider, prompt: string) {
   if (provider === "GEMINI" && process.env.GEMINI_API_KEY) {
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,

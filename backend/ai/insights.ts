@@ -1,7 +1,7 @@
 import { Redis } from "@upstash/redis";
-import type { Exam, SafeUser } from "@/backend/shared/types";
+import type { Exam, LlmProvider, SafeUser } from "@/backend/shared/types";
 import { buildPerformanceAnalytics } from "@/backend/analytics/performance";
-import { examsForStudent, upsertInsight } from "@/backend/exams/demo-store";
+import { examsForStudent, getPlatformConfig, upsertInsight } from "@/backend/exams/demo-store";
 
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
@@ -21,8 +21,34 @@ async function cached<T>(key: string, ttlSeconds: number, factory: () => Promise
   return value;
 }
 
-async function generateWithFreeTier(prompt: string) {
-  if (process.env.GEMINI_API_KEY) {
+function insightProviderOrder(preferred: LlmProvider) {
+  const config = getPlatformConfig();
+  const candidates: LlmProvider[] =
+    preferred === "INTERNAL"
+      ? []
+      : [
+          preferred,
+          preferred === "GEMINI" ? "GROQ" : "GEMINI"
+        ];
+  return candidates.filter((provider, index, list) => {
+    if (list.indexOf(provider) !== index) return false;
+    if (provider === "GEMINI") return config.geminiEnabled && Boolean(process.env.GEMINI_API_KEY);
+    if (provider === "GROQ") return config.groqEnabled && Boolean(process.env.GROQ_API_KEY);
+    return false;
+  });
+}
+
+async function generateWithConfiguredProvider(prompt: string) {
+  const config = getPlatformConfig();
+  for (const provider of insightProviderOrder(config.activeLlmProvider)) {
+    const text = await callInsightProvider(provider, prompt);
+    if (text) return { text, provider };
+  }
+  return null;
+}
+
+async function callInsightProvider(provider: LlmProvider, prompt: string) {
+  if (provider === "GEMINI" && process.env.GEMINI_API_KEY) {
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
       {
@@ -74,9 +100,9 @@ export async function dashboardInsights(student: SafeUser, audience: "parent" | 
       `Focus topics: ${performance.focusAreas.map((item) => `${item.label} ${item.accuracy}%`).join(", ") || "none yet"}.`,
       "Return concise JSON with summary, strengths, focusAreas, and plan. Analyse subject and topic performance separately."
     ].join("\n");
-    const generated = await generateWithFreeTier(prompt);
+    const generated = await generateWithConfiguredProvider(prompt);
     const fallback = buildLocalInsight(recent, audience);
-    const content = generated ? { summary: generated, generatedBy: "free-tier-llm" } : fallback;
+    const content = generated ? { summary: generated.text, generatedBy: generated.provider } : fallback;
 
     return upsertInsight({
       userId: student.id,

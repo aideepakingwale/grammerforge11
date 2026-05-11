@@ -54,14 +54,62 @@ export function hashVerificationToken(token: string) {
 }
 
 export async function sendVerificationEmail(input: { email: string; firstName: string; token: string }) {
-  const required = ["SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASS", "EMAIL_FROM", "APP_URL"];
-  const missing = required.filter((key) => !process.env[key]);
-  if (missing.length) {
-    throw new Error(`Email verification is not configured. Missing: ${missing.join(", ")}.`);
+  const required = ["EMAIL_FROM", "APP_URL"];
+  const missingBase = required.filter((key) => !process.env[key]);
+  if (missingBase.length) {
+    throw new Error(`Email verification is not configured. Missing: ${missingBase.join(", ")}.`);
   }
 
   const appUrl = process.env.APP_URL!.replace(/\/$/, "");
   const verifyUrl = `${appUrl}/api/auth/verify-email?token=${encodeURIComponent(input.token)}`;
+  const subject = "Confirm your GrammarForge account";
+  const text = [
+    `Hello ${input.firstName},`,
+    "",
+    "Please confirm your email address to activate your account:",
+    verifyUrl,
+    "",
+    "This link expires in 24 hours. If you did not request this account, ignore this email."
+  ].join("\n");
+  const html = `
+    <div style="font-family:Arial,sans-serif;line-height:1.6;color:#17211f">
+      <h2>Confirm your GrammarForge account</h2>
+      <p>Hello ${input.firstName},</p>
+      <p>Please confirm your email address to activate your account.</p>
+      <p><a href="${verifyUrl}" style="display:inline-block;background:#1e6f73;color:white;padding:12px 18px;border-radius:6px;text-decoration:none;font-weight:700">Confirm email</a></p>
+      <p>This link expires in 24 hours. If you did not request this account, ignore this email.</p>
+    </div>
+  `;
+
+  if (process.env.BREVO_API_KEY) {
+    const from = parseEmailFrom(process.env.EMAIL_FROM!);
+    const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "api-key": process.env.BREVO_API_KEY
+      },
+      body: JSON.stringify({
+        sender: from,
+        to: [{ email: input.email, name: input.firstName }],
+        subject,
+        htmlContent: html,
+        textContent: text
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error("Verification email could not be sent through the configured Brevo API key.");
+    }
+    return;
+  }
+
+  const smtpRequired = ["SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASS"];
+  const missingSmtp = smtpRequired.filter((key) => !process.env[key]);
+  if (missingSmtp.length) {
+    throw new Error(`Email verification is not configured. Set BREVO_API_KEY or SMTP settings. Missing SMTP fallback: ${missingSmtp.join(", ")}.`);
+  }
+
   const transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
     port: Number(process.env.SMTP_PORT),
@@ -75,23 +123,17 @@ export async function sendVerificationEmail(input: { email: string; firstName: s
   await transporter.sendMail({
     from: process.env.EMAIL_FROM,
     to: input.email,
-    subject: "Confirm your GrammarForge account",
-    text: [
-      `Hello ${input.firstName},`,
-      "",
-      "Please confirm your email address to activate your account:",
-      verifyUrl,
-      "",
-      "This link expires in 24 hours. If you did not request this account, ignore this email."
-    ].join("\n"),
-    html: `
-      <div style="font-family:Arial,sans-serif;line-height:1.6;color:#17211f">
-        <h2>Confirm your GrammarForge account</h2>
-        <p>Hello ${input.firstName},</p>
-        <p>Please confirm your email address to activate your account.</p>
-        <p><a href="${verifyUrl}" style="display:inline-block;background:#1e6f73;color:white;padding:12px 18px;border-radius:6px;text-decoration:none;font-weight:700">Confirm email</a></p>
-        <p>This link expires in 24 hours. If you did not request this account, ignore this email.</p>
-      </div>
-    `
+    subject,
+    text,
+    html
   });
+}
+
+function parseEmailFrom(value: string) {
+  const match = value.match(/^(.*?)<(.+)>$/);
+  if (!match) return { email: value.trim() };
+  return {
+    name: match[1].trim().replace(/^"|"$/g, ""),
+    email: match[2].trim()
+  };
 }
