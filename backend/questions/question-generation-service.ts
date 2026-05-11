@@ -9,6 +9,7 @@ import { callQuestionGenerationLlm } from "@/backend/questions/llm-question-clie
 import { buildQuestionGenerationPlan } from "@/backend/questions/generation-planner";
 import { buildLlmQuestionPrompt } from "@/backend/questions/question-prompt-builder";
 import type { GeneratedQuestionResult, QuestionGenerationInput, QuestionGenerationPlanItem } from "@/backend/questions/question-generation-types";
+import { questionBankStatsFromDatabase, saveQuestionsToQuestionMaster } from "@/backend/questions/question-master-repository";
 
 export type { QuestionGenerationInput, QuestionGenerationPlanItem } from "@/backend/questions/question-generation-types";
 export { buildQuestionGenerationPlan } from "@/backend/questions/generation-planner";
@@ -38,10 +39,14 @@ export function questionBankStats(): QuestionBankStats {
   };
 }
 
-export function questionGenerationAdminState() {
+export async function questionBankStatsLive(): Promise<QuestionBankStats> {
+  return (await questionBankStatsFromDatabase()) ?? questionBankStats();
+}
+
+export async function questionGenerationAdminState() {
   const data = store();
   return {
-    stats: questionBankStats(),
+    stats: await questionBankStatsLive(),
     llmQuota: llmQuotaSnapshot(),
     schedule: data.questionGenerationSchedule,
     jobs: data.questionGenerationJobs.slice().reverse().slice(0, 12)
@@ -138,6 +143,7 @@ export async function runQuestionGeneration(input: QuestionGenerationInput) {
   try {
     const generated = await generateAdminQuestions(input, generationPlan);
     questionBank.push(...generated.questions);
+    await saveQuestionsToQuestionMaster(generated.questions, input.provider === "INTERNAL" ? "admin_internal_generation" : "admin_llm_generation");
     job.status = "COMPLETED";
     job.generatedCount = generated.questions.length;
     job.completedAt = new Date().toISOString();
@@ -154,7 +160,7 @@ export async function runQuestionGeneration(input: QuestionGenerationInput) {
     job.completedAt = new Date().toISOString();
   }
 
-  return { job, stats: questionBankStats() };
+  return { job, stats: await questionBankStatsLive() };
 }
 
 export function previewQuestionGeneration(input: QuestionGenerationInput) {
@@ -177,16 +183,17 @@ export async function generateQuestionCandidates(input: QuestionGenerationInput 
     questions: result.questions.map((question) => ({ ...question, id: uid("q_candidate") })),
     generationMeta: result.meta,
     llmQuota: llmQuotaSnapshot(),
-    stats: questionBankStats()
+    stats: await questionBankStatsLive()
   };
 }
 
-export function importGeneratedQuestions(questions: Question[]) {
+export async function importGeneratedQuestions(questions: Question[]) {
   const imported = questions.map((question) => ({
     ...enrichQuestionSyllabus(question),
     id: uid("q_admin_import")
   }));
   questionBank.push(...imported);
+  const persistence = await saveQuestionsToQuestionMaster(imported, "admin_import");
   const job: QuestionGenerationJob = {
     id: uid("qgen_import"),
     subject: imported[0]?.subjectType ?? "MATHS",
@@ -204,7 +211,7 @@ export function importGeneratedQuestions(questions: Question[]) {
     generatedCount: imported.length
   };
   store().questionGenerationJobs.push(job);
-  return { imported, job, stats: questionBankStats() };
+  return { imported, persistence, job, stats: await questionBankStatsLive() };
 }
 
 export async function runScheduledQuestionGenerationNow() {

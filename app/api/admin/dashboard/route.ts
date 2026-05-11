@@ -15,6 +15,6 @@ export async function GET() {
     config: getPlatformConfig(),
     plans: listPlans(),
     pages: listPublicPages(),
-    questionGeneration: questionGenerationAdminState()
+    questionGeneration: await questionGenerationAdminState()
   });
 }

@@ -4,5 +4,5 @@ import { questionGenerationAdminState } from "@/backend/questions/question-gener
 
 export async function GET() {
   await requireUser(["ADMIN"]);
-  return NextResponse.json(questionGenerationAdminState());
+  return NextResponse.json(await questionGenerationAdminState());
 }

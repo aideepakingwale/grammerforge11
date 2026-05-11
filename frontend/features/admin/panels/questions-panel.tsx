@@ -280,15 +280,40 @@ function GeneratedReview({ candidates, selectedQuestionIds, generationMeta, togg
               <input className="mt-1 h-5 w-5 accent-teal" type="checkbox" checked={selectedQuestionIds.includes(question.id)} onChange={() => toggleQuestion(question.id)} />
               <span><span className="font-black">Question {index + 1}: {question.topic} / {question.microTopic}</span><span className="mt-1 block text-sm font-semibold text-ink/60">{question.instruction}</span></span>
             </label>
-            {question.stimulus && <div className="mt-3 rounded-md bg-paper p-3"><p className="text-xs font-black uppercase text-ink/45">{question.stimulus.title}</p><p className="mt-1 whitespace-pre-wrap text-sm leading-6">{question.stimulus.content}</p></div>}
-            <p className="mt-3 font-semibold">{question.questionData.content}</p>
-            {question.options.length > 0 && <div className="mt-3 grid gap-2 md:grid-cols-2">{question.options.map((option, optionIndex) => <div key={`${question.id}-${optionIndex}`} className="rounded-md border border-ink/10 bg-paper p-2 text-sm font-semibold">{String.fromCharCode(65 + optionIndex)}. {option.content}</div>)}</div>}
-            <div className="mt-3 rounded-md bg-teal/10 p-3 text-sm"><p className="font-black text-teal">Answer: {question.answer}</p><p className="mt-1 leading-6 text-ink/70">{question.explanation}</p></div>
+            {question.stimulus && <div className="mt-3 rounded-md bg-paper p-3"><p className="text-xs font-black uppercase text-ink/45">{question.stimulus.title}</p><QuestionVisual payload={question.stimulus} /></div>}
+            <div className="mt-3 font-semibold"><QuestionVisual payload={question.questionData} /></div>
+            {question.options.length > 0 && <div className="mt-3 grid gap-2 md:grid-cols-2">{question.options.map((option, optionIndex) => <div key={`${question.id}-${optionIndex}`} className="rounded-md border border-ink/10 bg-paper p-2 text-sm font-semibold"><span className="mb-2 block text-xs font-black text-ink/45">Option {String.fromCharCode(65 + optionIndex)}</span><QuestionVisual payload={option} /></div>)}</div>}
+            <div className="mt-3 rounded-md bg-teal/10 p-3 text-sm">
+              <div className="font-black text-teal">Answer: <AnswerVisual answer={question.answer} /></div>
+              <p className="mt-1 leading-6 text-ink/70">{question.explanation}</p>
+            </div>
           </div>
         ))}
       </div>
     </div>
   );
+}
+
+function QuestionVisual({ payload }: { payload: { mode: string; content: string; caption?: string } }) {
+  if (payload.mode === "svg" && payload.content.trim().startsWith("<svg")) {
+    return (
+      <figure>
+        <div className="option-figure rounded-md border border-ink/10 bg-white p-3" dangerouslySetInnerHTML={{ __html: payload.content }} />
+        {payload.caption && <figcaption className="mt-2 text-xs font-semibold text-ink/50">{payload.caption}</figcaption>}
+      </figure>
+    );
+  }
+  if (payload.mode === "table") {
+    return <pre className="overflow-x-auto whitespace-pre-wrap rounded-md border border-ink/10 bg-white p-3 text-xs leading-5">{payload.content}</pre>;
+  }
+  return <p className="whitespace-pre-wrap text-sm leading-6">{payload.content}</p>;
+}
+
+function AnswerVisual({ answer }: { answer: string }) {
+  if (answer.trim().startsWith("<svg")) {
+    return <span className="mt-2 block max-w-xs"><QuestionVisual payload={{ mode: "svg", content: answer }} /></span>;
+  }
+  return <span>{answer}</span>;
 }
 
 function GenerationMetaPanel({ meta }: { meta: LlmGenerationMeta }) {
