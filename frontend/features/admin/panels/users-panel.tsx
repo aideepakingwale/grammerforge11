@@ -30,7 +30,7 @@ export function UsersPanel({ users, mutate }: { users: SafeUser[]; mutate: Mutat
               }}
             >
               <div>
-                <p className="text-xs font-black uppercase text-ink/40">{user.email}</p>
+                <p className="text-xs font-black uppercase text-ink/40">{user.email ?? user.username}</p>
                 <div className="mt-2 grid grid-cols-2 gap-2">
                   <input className="field" name="firstName" defaultValue={user.firstName} />
                   <input className="field" name="lastName" defaultValue={user.lastName} />

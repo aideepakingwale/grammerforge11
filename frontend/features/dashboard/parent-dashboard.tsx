@@ -34,6 +34,7 @@ export function ParentDashboard() {
   const [billing, setBilling] = useState("");
   const [studentMessage, setStudentMessage] = useState("");
   const [studentError, setStudentError] = useState("");
+  const [studentAccessCode, setStudentAccessCode] = useState("");
 
   useEffect(() => {
     fetch("/api/dashboard/parent")
@@ -74,6 +75,7 @@ export function ParentDashboard() {
     event.preventDefault();
     setStudentMessage("");
     setStudentError("");
+    setStudentAccessCode("");
     const formData = new FormData(event.currentTarget);
     const response = await fetch("/api/parent/students", {
       method: "POST",
@@ -81,7 +83,7 @@ export function ParentDashboard() {
       body: JSON.stringify({
         firstName: String(formData.get("firstName") ?? ""),
         lastName: String(formData.get("lastName") ?? ""),
-        email: String(formData.get("email") ?? ""),
+        username: String(formData.get("username") ?? ""),
         password: String(formData.get("password") ?? "")
       })
     });
@@ -91,12 +93,31 @@ export function ParentDashboard() {
       return;
     }
     setStudentMessage(json.message ?? "Student linked.");
+    setStudentAccessCode(json.accessCode ?? "");
     setData((current) => current ? {
       ...current,
       students: [...current.students, json.student],
       selectedStudent: current.selectedStudent ?? json.student
     } : current);
     event.currentTarget.reset();
+  }
+
+  async function generateAccessCode(studentId: string) {
+    setStudentMessage("");
+    setStudentError("");
+    setStudentAccessCode("");
+    const response = await fetch("/api/parent/students/access-code", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ studentId })
+    });
+    const json = await response.json();
+    if (!response.ok) {
+      setStudentError(json.error ?? "Could not generate access code");
+      return;
+    }
+    setStudentAccessCode(json.accessCode ?? "");
+    setStudentMessage(json.message ?? "New access code generated.");
   }
 
   if (!data) return <main className="app-shell p-6">Loading dashboard...</main>;
@@ -140,17 +161,52 @@ export function ParentDashboard() {
               <div>
                 <p className="eyebrow">Student setup</p>
                 <h2 className="mt-1 text-2xl font-black">Link Devansh or another student</h2>
-                <p className="mt-1 text-sm leading-6 text-ink/65">Create a verified student account so exams, progress, rewards, and parent analytics are connected to your family account.</p>
+                <p className="mt-1 text-sm leading-6 text-ink/65">Create a student username and password. The first login on each new device uses a 6-digit parent code, then the trusted device is remembered securely.</p>
               </div>
             </div>
             <form className="mt-4 grid gap-3 md:grid-cols-5" onSubmit={createStudent}>
               <input className="field" name="firstName" placeholder="Student first name" defaultValue="Devansh" required />
               <input className="field" name="lastName" placeholder="Student last name" defaultValue="Ingwale" required />
-              <input className="field md:col-span-2" name="email" type="email" placeholder="Student real email" required />
+              <input className="field md:col-span-2" name="username" placeholder="Student username, e.g. devansh11" defaultValue="devansh11" required />
               <input className="field" name="password" type="password" minLength={8} placeholder="Password" required />
               <Button className="md:col-span-5" type="submit">Create and link student</Button>
             </form>
             {studentMessage && <p className="mt-3 rounded-md bg-teal/10 p-3 text-sm font-semibold text-teal">{studentMessage}</p>}
+            {studentAccessCode && (
+              <div className="mt-3 rounded-md border border-gold/30 bg-gold/10 p-4">
+                <p className="text-xs font-black uppercase text-gold">Student one-time device code</p>
+                <p className="mt-1 text-3xl font-black tracking-[0.2em] text-ink">{studentAccessCode}</p>
+                <p className="mt-2 text-sm font-semibold text-ink/65">Give this code to the student for first login on a new machine. The same browser will not ask again after it is trusted.</p>
+              </div>
+            )}
+            {studentError && <p className="mt-3 rounded-md bg-coral/10 p-3 text-sm font-semibold text-coral">{studentError}</p>}
+          </section>
+        )}
+
+        {data.students.length > 0 && (
+          <section className="premium-card mb-4 p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="eyebrow">Student device access</p>
+                <h2 className="mt-1 text-2xl font-black">Approve a new student machine</h2>
+                <p className="mt-1 text-sm leading-6 text-ink/65">Generate a fresh one-time code when your child signs in from a new browser or computer.</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {data.students.map((student) => (
+                  <Button key={student.id} type="button" onClick={() => void generateAccessCode(student.id)}>
+                    Generate code for {student.firstName}
+                  </Button>
+                ))}
+              </div>
+            </div>
+            {studentMessage && <p className="mt-3 rounded-md bg-teal/10 p-3 text-sm font-semibold text-teal">{studentMessage}</p>}
+            {studentAccessCode && (
+              <div className="mt-3 rounded-md border border-gold/30 bg-gold/10 p-4">
+                <p className="text-xs font-black uppercase text-gold">One-time student device code</p>
+                <p className="mt-1 text-3xl font-black tracking-[0.2em] text-ink">{studentAccessCode}</p>
+                <p className="mt-2 text-sm font-semibold text-ink/65">This code expires in 24 hours and is consumed after it trusts the new device.</p>
+              </div>
+            )}
             {studentError && <p className="mt-3 rounded-md bg-coral/10 p-3 text-sm font-semibold text-coral">{studentError}</p>}
           </section>
         )}

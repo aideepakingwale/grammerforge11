@@ -9,6 +9,10 @@ function secret() {
   return new TextEncoder().encode(process.env.AUTH_SECRET ?? "development-secret-change-me");
 }
 
+export function authSecret() {
+  return secret();
+}
+
 export async function createSession(user: SafeUser) {
   const token = await new SignJWT({
     sub: user.id,

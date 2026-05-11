@@ -23,7 +23,7 @@ export async function POST(request: Request) {
   const origin = request.headers.get("origin") ?? "http://localhost:3000";
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",
-    customer_email: user.email,
+    customer_email: user.email ?? undefined,
     line_items: [{ price, quantity: 1 }],
     success_url: `${origin}/dashboard/parent?billing=success`,
     cancel_url: `${origin}/dashboard/parent?billing=cancelled`,

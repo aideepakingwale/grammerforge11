@@ -10,7 +10,7 @@ type StoredUser = SafeUser & { passwordHash: string };
 
 export async function adminCreateUser(input: AdminUserInput) {
   const data = store();
-  const existing = data.users.find((user) => user.email.toLowerCase() === input.email.toLowerCase());
+  const existing = data.users.find((user) => user.email?.toLowerCase() === input.email.toLowerCase());
   if (existing) throw new Error("An account with this email already exists.");
 
   const user: StoredUser = {

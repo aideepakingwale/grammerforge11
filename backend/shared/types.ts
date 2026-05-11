@@ -10,7 +10,8 @@ export type SafeUser = {
   id: string;
   role: Role;
   subscriptionTier: Tier;
-  email: string;
+  email?: string | null;
+  username?: string | null;
   firstName: string;
   lastName: string;
   parentId?: string | null;
