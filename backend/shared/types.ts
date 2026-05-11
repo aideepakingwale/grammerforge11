@@ -38,6 +38,16 @@ export type PlatformConfig = {
   maskedGeminiKey: string;
   maskedGroqKey: string;
   maskedStripeKey: string;
+  llmQuota: Array<{
+    provider: LlmProvider;
+    enabled: boolean;
+    configured: boolean;
+    dailyLimit: number;
+    usedToday: number;
+    remainingToday: number | null;
+    resetAt: string;
+    note: string;
+  }>;
   updatedAt: string;
 };
 

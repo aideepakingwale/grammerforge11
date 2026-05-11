@@ -43,6 +43,7 @@ type AdminData = {
   pages: PublicPage[];
   questionGeneration?: {
     stats: QuestionBankStats;
+    llmQuota: PlatformConfig["llmQuota"];
     schedule: QuestionGenerationSchedule;
     jobs: QuestionGenerationJob[];
   };
@@ -328,6 +329,32 @@ function ConfigPanel({ config, mutate }: { config: PlatformConfig; mutate: (url:
           <input className="field mt-2" name="aiDailyLimitPremium" type="number" defaultValue={config.aiDailyLimitPremium} />
         </label>
       </div>
+      <div className="mt-5 grid gap-3 md:grid-cols-3">
+        {config.llmQuota.map((quota) => (
+          <div key={quota.provider} className="rounded-md border border-ink/10 bg-white p-4">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="font-black">{quota.provider}</h3>
+              <span className={`chip ${quota.enabled && quota.configured ? "bg-teal/10 text-teal" : "bg-coral/10 text-coral"}`}>
+                {quota.enabled && quota.configured ? "Ready" : quota.enabled ? "Missing key" : "Disabled"}
+              </span>
+            </div>
+            <p className="mt-3 text-2xl font-black">
+              {quota.remainingToday === null ? "Unlimited" : quota.remainingToday}
+            </p>
+            <p className="text-sm font-bold text-ink/55">estimated remaining today</p>
+            <div className="mt-3 h-2 rounded-full bg-ink/10">
+              <div
+                className="h-2 rounded-full bg-teal"
+                style={{ width: `${quota.remainingToday === null ? 100 : Math.min(100, Math.round((quota.usedToday / Math.max(quota.dailyLimit, 1)) * 100))}%` }}
+              />
+            </div>
+            <p className="mt-2 text-xs font-semibold leading-5 text-ink/55">
+              Used {quota.usedToday} of {quota.dailyLimit}. Resets {new Date(quota.resetAt).toLocaleTimeString()}.
+            </p>
+            <p className="mt-2 text-xs font-semibold leading-5 text-ink/45">{quota.note}</p>
+          </div>
+        ))}
+      </div>
       <div className="mt-5 flex flex-wrap gap-3">
         {[
           ["geminiEnabled", "Gemini enabled", config.geminiEnabled],
@@ -504,6 +531,7 @@ function QuestionsPanel({
 }: {
   initial?: {
     stats: QuestionBankStats;
+    llmQuota: PlatformConfig["llmQuota"];
     schedule: QuestionGenerationSchedule;
     jobs: QuestionGenerationJob[];
   };
@@ -535,6 +563,7 @@ function QuestionsPanel({
     updatedAt: new Date().toISOString()
   };
   const stats = initial?.stats;
+  const llmQuota = initial?.llmQuota ?? [];
   const schedule = initial?.schedule ?? fallback;
   const jobs = initial?.jobs ?? [];
   const topics = syllabusRegistry[subject];
@@ -878,6 +907,25 @@ function QuestionsPanel({
               <div key={subject} className="flex justify-between rounded-md border border-ink/10 bg-white p-3 text-sm font-black">
                 <span>{subject.replaceAll("_", " ")}</span>
                 <span>{count}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="premium-card p-4">
+          <h2 className="text-xl font-black">LLM quota status</h2>
+          <p className="mt-1 text-sm font-semibold text-ink/55">Shows platform-side usage tracking. Exact remaining Gemini/Groq free-tier quota is not available from their generation APIs.</p>
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            {llmQuota.map((quota) => (
+              <div key={quota.provider} className="rounded-md border border-ink/10 bg-white p-3">
+                <div className="flex items-center justify-between">
+                  <p className="font-black">{quota.provider}</p>
+                  <span className={`text-xs font-black ${quota.enabled && quota.configured ? "text-teal" : "text-coral"}`}>
+                    {quota.enabled && quota.configured ? "READY" : quota.enabled ? "NO KEY" : "OFF"}
+                  </span>
+                </div>
+                <p className="mt-3 text-2xl font-black">{quota.remainingToday === null ? "∞" : quota.remainingToday}</p>
+                <p className="text-xs font-bold text-ink/55">remaining today, used {quota.usedToday}</p>
               </div>
             ))}
           </div>

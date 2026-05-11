@@ -54,6 +54,7 @@ function mask(value: string | undefined, fallback: string) {
 }
 
 function defaultPlatformConfig(): PlatformConfig {
+  const today = new Date();
   return {
     activeLlmProvider: "GEMINI",
     geminiEnabled: true,
@@ -65,6 +66,7 @@ function defaultPlatformConfig(): PlatformConfig {
     maskedGeminiKey: mask(process.env.GEMINI_API_KEY, "not configured"),
     maskedGroqKey: mask(process.env.GROQ_API_KEY, "not configured"),
     maskedStripeKey: mask(process.env.STRIPE_SECRET_KEY, "not configured"),
+    llmQuota: llmQuotaSnapshot(today),
     updatedAt: new Date().toISOString()
   };
 }
@@ -450,7 +452,12 @@ export function adminDeleteUser(userId: string) {
 }
 
 export function getPlatformConfig() {
-  return store().platformConfig;
+  const data = store();
+  data.platformConfig = {
+    ...data.platformConfig,
+    llmQuota: llmQuotaSnapshot()
+  };
+  return data.platformConfig;
 }
 
 export function updatePlatformConfig(input: Partial<PlatformConfig>) {
@@ -461,6 +468,7 @@ export function updatePlatformConfig(input: Partial<PlatformConfig>) {
     maskedGeminiKey: input.maskedGeminiKey ?? data.platformConfig.maskedGeminiKey,
     maskedGroqKey: input.maskedGroqKey ?? data.platformConfig.maskedGroqKey,
     maskedStripeKey: input.maskedStripeKey ?? data.platformConfig.maskedStripeKey,
+    llmQuota: llmQuotaSnapshot(),
     updatedAt: new Date().toISOString()
   };
   return data.platformConfig;
@@ -613,9 +621,60 @@ export function questionGenerationAdminState() {
   const data = store();
   return {
     stats: questionBankStats(),
+    llmQuota: llmQuotaSnapshot(),
     schedule: data.questionGenerationSchedule,
     jobs: data.questionGenerationJobs.slice().reverse().slice(0, 12)
   };
+}
+
+function llmQuotaSnapshot(now = new Date()) {
+  const reset = new Date(now);
+  reset.setUTCHours(24, 0, 0, 0);
+  const today = now.toISOString().slice(0, 10);
+  const usage = store().questionGenerationJobs.filter((job) => job.createdAt.slice(0, 10) === today);
+  const providerUsage = (provider: LlmProvider) => usage
+    .filter((job) => job.provider === provider && job.status === "COMPLETED")
+    .reduce((sum, job) => sum + job.generatedCount, 0);
+  const configured = {
+    GEMINI: Boolean(process.env.GEMINI_API_KEY),
+    GROQ: Boolean(process.env.GROQ_API_KEY),
+    INTERNAL: true
+  };
+  const config = store().platformConfig;
+  const adminDailyLimit = Math.max(config.aiDailyLimitPremium, config.aiDailyLimitPro, config.aiDailyLimitFree);
+  const rows: Array<{ provider: LlmProvider; enabled: boolean; dailyLimit: number; note: string }> = [
+    {
+      provider: "GEMINI",
+      enabled: config.geminiEnabled,
+      dailyLimit: adminDailyLimit,
+      note: "Estimated platform-side question generation budget. Gemini's exact remaining free-tier quota is not exposed by API."
+    },
+    {
+      provider: "GROQ",
+      enabled: config.groqEnabled,
+      dailyLimit: adminDailyLimit,
+      note: "Estimated platform-side question generation budget. Groq's exact remaining free-tier quota is not exposed by API."
+    },
+    {
+      provider: "INTERNAL",
+      enabled: true,
+      dailyLimit: 10000,
+      note: "Internal fallback has no external token quota."
+    }
+  ];
+  return rows.map((row) => {
+    const usedToday = providerUsage(row.provider);
+    return {
+      provider: row.provider,
+      enabled: row.enabled,
+      configured: configured[row.provider],
+      dailyLimit: row.dailyLimit,
+      usedToday,
+      remainingToday: row.provider === "INTERNAL" ? null : Math.max(0, row.dailyLimit - usedToday),
+      resetAt: reset.toISOString(),
+      note: row.note
+    };
+  });
 }
 
 export function updateQuestionGenerationSchedule(input: Partial<QuestionGenerationSchedule>) {
@@ -803,14 +862,29 @@ function buildQuestionGenerationPlan(input: QuestionGenerationInput): QuestionGe
 
 async function generateAdminQuestions(input: QuestionGenerationInput, generationPlan: QuestionGenerationPlanItem[]): Promise<Question[]> {
   const llmQuestions = input.provider === "INTERNAL" ? null : await generateQuestionsWithConfiguredLlm(input, generationPlan);
-  if (llmQuestions?.length) return llmQuestions.slice(0, input.count);
+  if (llmQuestions?.length) {
+    const trimmed = llmQuestions.slice(0, input.count);
+    if (trimmed.length >= input.count) return trimmed;
+    const fallback = buildFallbackAdminQuestions(input, generationPlan, input.count, trimmed.length);
+    return [...trimmed, ...fallback.slice(0, input.count - trimmed.length)];
+  }
 
+  return buildFallbackAdminQuestions(input, generationPlan, input.count, 0);
+}
+
+function buildFallbackAdminQuestions(
+  input: QuestionGenerationInput,
+  generationPlan: QuestionGenerationPlanItem[],
+  count: number,
+  offset: number
+): Question[] {
   const sourceQuestions = questionBank.filter((question) => question.subjectType === input.subject);
   const fallback = sourceQuestions[0] ?? questionBank[0];
   const planSlots = generationPlan.flatMap((plan) => Array.from({ length: plan.count }, () => plan));
-  return Array.from({ length: input.count }, (_, index) => {
+  return Array.from({ length: count }, (_, localIndex) => {
+    const index = localIndex + offset;
     const source = sourceQuestions[index % Math.max(sourceQuestions.length, 1)] ?? fallback;
-    const plan = planSlots[index] ?? generationPlan[0];
+    const plan = planSlots[index % Math.max(planSlots.length, 1)] ?? generationPlan[0];
     const isMultipleChoice = plan.questionType === "MULTIPLE_CHOICE";
     return {
       ...enrichQuestionSyllabus(source),
@@ -853,7 +927,12 @@ async function generateAdminQuestionsWithPrompt(
   const text = input.provider === "INTERNAL" ? null : await callQuestionGenerationLlm(input.provider, prompt);
   if (text) {
     const parsed = parseGeneratedQuestions(input, text);
-    if (parsed?.length) return parsed.slice(0, input.count);
+    if (parsed?.length) {
+      const trimmed = parsed.slice(0, input.count);
+      if (trimmed.length >= input.count) return trimmed;
+      const fallback = buildFallbackAdminQuestions(input, generationPlan, input.count, trimmed.length);
+      return [...trimmed, ...fallback.slice(0, input.count - trimmed.length)];
+    }
   }
   return generateAdminQuestions({ ...input, provider: "INTERNAL" }, generationPlan);
 }
