@@ -109,10 +109,14 @@ export type QuestionGenerationJob = {
   microTopic: string;
   topic?: string;
   subTopics?: string[];
+  difficulties?: Difficulty[];
+  questionTypes?: QuestionType[];
   generationPlan?: Array<{
     topic: string;
     syllabusTopicSlug: string;
     subTopic: string;
+    difficulty?: Difficulty;
+    questionType?: QuestionType;
     count: number;
   }>;
   provider: LlmProvider;
@@ -133,6 +137,8 @@ export type QuestionGenerationSchedule = {
   microTopic: string;
   topic?: string;
   subTopics?: string[];
+  difficulties?: Difficulty[];
+  questionTypes?: QuestionType[];
   provider: LlmProvider;
   frequency: "DAILY" | "WEEKLY";
   runAt: string;

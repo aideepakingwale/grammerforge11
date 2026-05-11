@@ -29,6 +29,7 @@ import type {
   QuestionBankStats,
   QuestionGenerationJob,
   QuestionGenerationSchedule,
+  QuestionType,
   SafeUser,
   Subject,
   SubscriptionPlanConfig
@@ -511,8 +512,8 @@ function QuestionsPanel({
   const [subject, setSubject] = useState<Subject>("MATHS");
   const [topic, setTopic] = useState(syllabusRegistry.MATHS[0].name);
   const [selectedSubTopics, setSelectedSubTopics] = useState<string[]>([]);
-  const [difficulty, setDifficulty] = useState<Difficulty>("MEDIUM");
-  const [questionType, setQuestionType] = useState<"MULTIPLE_CHOICE" | "SHORT_ANSWER">("MULTIPLE_CHOICE");
+  const [selectedDifficulties, setSelectedDifficulties] = useState<Difficulty[]>(["MEDIUM"]);
+  const [selectedQuestionTypes, setSelectedQuestionTypes] = useState<QuestionType[]>(["MULTIPLE_CHOICE"]);
   const [count, setCount] = useState(10);
   const [provider, setProvider] = useState<"GEMINI" | "GROQ" | "INTERNAL">("GEMINI");
   const [prompt, setPrompt] = useState("");
@@ -552,12 +553,14 @@ function QuestionsPanel({
 
   const generationPayload = {
     subject,
-    difficulty,
-    questionType,
+    difficulty: selectedDifficulties[0] ?? "MEDIUM",
+    questionType: selectedQuestionTypes[0] ?? "MULTIPLE_CHOICE",
     count,
     microTopic: selectedSubTopics[0] ?? selectedTopic?.subTopics[0] ?? selectedTopic?.name ?? "Mixed 11+ Practice",
     topic,
     subTopics: selectedSubTopics.length ? selectedSubTopics : visibleSubTopics.slice(0, Math.min(4, visibleSubTopics.length)),
+    difficulties: selectedDifficulties,
+    questionTypes: selectedQuestionTypes,
     provider
   };
 
@@ -617,6 +620,20 @@ function QuestionsPanel({
     );
   }
 
+  function toggleDifficulty(value: Difficulty) {
+    setSelectedDifficulties((current) => {
+      const next = current.includes(value) ? current.filter((item) => item !== value) : [...current, value];
+      return next.length ? next : [value];
+    });
+  }
+
+  function toggleQuestionType(value: QuestionType) {
+    setSelectedQuestionTypes((current) => {
+      const next = current.includes(value) ? current.filter((item) => item !== value) : [...current, value];
+      return next.length ? next : [value];
+    });
+  }
+
   function toggleQuestion(questionId: string) {
     setSelectedQuestionIds((current) =>
       current.includes(questionId) ? current.filter((id) => id !== questionId) : [...current, questionId]
@@ -655,17 +672,25 @@ function QuestionsPanel({
                 ))}
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              <select className="field" value={difficulty} onChange={(event) => setDifficulty(event.target.value as Difficulty)}>
-                <option value="EASY">Easy</option>
-                <option value="MEDIUM">Medium</option>
-                <option value="HARD">Hard</option>
-                <option value="ADVANCED">Advanced</option>
-              </select>
-              <select className="field" value={questionType} onChange={(event) => setQuestionType(event.target.value as "MULTIPLE_CHOICE" | "SHORT_ANSWER")}>
-                <option value="MULTIPLE_CHOICE">Multiple choice</option>
-                <option value="SHORT_ANSWER">Short answer</option>
-              </select>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="rounded-md border border-ink/10 bg-white p-2">
+                <p className="mb-2 text-xs font-black uppercase text-ink/45">Difficulty mix</p>
+                {(["EASY", "MEDIUM", "HARD", "ADVANCED"] as Difficulty[]).map((item) => (
+                  <label key={item} className="mb-2 flex items-center gap-2 rounded-md bg-paper px-3 py-2 text-sm font-bold">
+                    <input type="checkbox" checked={selectedDifficulties.includes(item)} onChange={() => toggleDifficulty(item)} />
+                    {item}
+                  </label>
+                ))}
+              </div>
+              <div className="rounded-md border border-ink/10 bg-white p-2">
+                <p className="mb-2 text-xs font-black uppercase text-ink/45">Question type mix</p>
+                {(["MULTIPLE_CHOICE", "SHORT_ANSWER"] as QuestionType[]).map((item) => (
+                  <label key={item} className="mb-2 flex items-center gap-2 rounded-md bg-paper px-3 py-2 text-sm font-bold">
+                    <input type="checkbox" checked={selectedQuestionTypes.includes(item)} onChange={() => toggleQuestionType(item)} />
+                    {item.replaceAll("_", " ")}
+                  </label>
+                ))}
+              </div>
             </div>
             <div className="grid grid-cols-[1fr_110px] gap-2">
               <select className="field" value={provider} onChange={(event) => setProvider(event.target.value as "GEMINI" | "GROQ" | "INTERNAL")}>
@@ -696,6 +721,8 @@ function QuestionsPanel({
                 .split(",")
                 .map((item) => item.trim())
                 .filter(Boolean),
+              difficulties: [String(formData.get("difficulty"))],
+              questionTypes: [String(formData.get("questionType"))],
               provider: String(formData.get("provider")),
               frequency: String(formData.get("frequency")),
               runAt: String(formData.get("runAt"))

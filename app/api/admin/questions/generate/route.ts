@@ -11,6 +11,8 @@ const schema = z.object({
   microTopic: z.string().min(2).max(120),
   topic: z.string().min(2).max(160).optional(),
   subTopics: z.array(z.string().min(2).max(120)).optional(),
+  difficulties: z.array(z.enum(["EASY", "MEDIUM", "HARD", "ADVANCED"])).optional(),
+  questionTypes: z.array(z.enum(["MULTIPLE_CHOICE", "SHORT_ANSWER"])).optional(),
   provider: z.enum(["GEMINI", "GROQ", "INTERNAL"]),
   promptOverride: z.string().min(20).optional()
 });

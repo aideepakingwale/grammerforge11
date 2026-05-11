@@ -641,6 +641,8 @@ type QuestionGenerationInput = {
   microTopic: string;
   topic?: string;
   subTopics?: string[];
+  difficulties?: Difficulty[];
+  questionTypes?: QuestionType[];
   provider: LlmProvider;
   mode: "ON_DEMAND" | "SCHEDULED";
 };
@@ -649,6 +651,8 @@ type QuestionGenerationPlanItem = {
   topic: string;
   syllabusTopicSlug: string;
   subTopic: string;
+  difficulty: Difficulty;
+  questionType: QuestionType;
   count: number;
 };
 
@@ -775,9 +779,20 @@ function buildQuestionGenerationPlan(input: QuestionGenerationInput): QuestionGe
         subTopic: input.microTopic
       }];
 
-  const base = Math.floor(input.count / normalizedPool.length);
-  let remainder = input.count % normalizedPool.length;
-  return normalizedPool
+  const difficulties = input.difficulties?.length ? input.difficulties : [input.difficulty];
+  const questionTypes = input.questionTypes?.length ? input.questionTypes : [input.questionType];
+  const combinations = normalizedPool.flatMap((topicItem) =>
+    difficulties.flatMap((difficulty) =>
+      questionTypes.map((questionType) => ({
+        ...topicItem,
+        difficulty,
+        questionType
+      }))
+    )
+  );
+  const base = Math.floor(input.count / combinations.length);
+  let remainder = input.count % combinations.length;
+  return combinations
     .map((item) => {
       const count = base + (remainder > 0 ? 1 : 0);
       remainder -= 1;
@@ -795,14 +810,14 @@ async function generateAdminQuestions(input: QuestionGenerationInput, generation
   const planSlots = generationPlan.flatMap((plan) => Array.from({ length: plan.count }, () => plan));
   return Array.from({ length: input.count }, (_, index) => {
     const source = sourceQuestions[index % Math.max(sourceQuestions.length, 1)] ?? fallback;
-    const isMultipleChoice = input.questionType === "MULTIPLE_CHOICE";
     const plan = planSlots[index] ?? generationPlan[0];
+    const isMultipleChoice = plan.questionType === "MULTIPLE_CHOICE";
     return {
       ...enrichQuestionSyllabus(source),
       id: uid("q_admin_llm"),
       subjectType: input.subject,
-      questionType: input.questionType,
-      difficultyLevel: input.difficulty,
+      questionType: plan.questionType,
+      difficultyLevel: plan.difficulty,
       topic: plan.topic,
       syllabusTopicSlug: plan.syllabusTopicSlug,
       microTopic: plan.subTopic,
@@ -825,7 +840,7 @@ async function generateAdminQuestions(input: QuestionGenerationInput, generation
       examBoardTags: topicForSubTopic(input.subject, plan.subTopic).examBoards,
       marksAvailable: source.marksAvailable ?? 1,
       scoringWeight: source.scoringWeight ?? 1,
-      estimatedSeconds: input.difficulty === "EASY" ? 45 : input.difficulty === "MEDIUM" ? 60 : 75
+      estimatedSeconds: plan.difficulty === "EASY" ? 45 : plan.difficulty === "MEDIUM" ? 60 : 75
     };
   });
 }
@@ -850,15 +865,21 @@ function buildLlmQuestionPrompt(input: QuestionGenerationInput, generationPlan: 
     "The JSON shape must be: { \"questions\": [ ... ] }.",
     "Each question object must contain: questionType, difficultyLevel, topic, syllabusTopicSlug, microTopic, instruction, stimulus, questionData, options, answer, explanation, skillTags, estimatedSeconds, marksAvailable, scoringWeight.",
     "Use this content payload shape for questionData, stimulus, and options: { \"mode\": \"text\" | \"svg\" | \"passage\" | \"table\", \"title\"?: string, \"content\": string, \"caption\"?: string }.",
+    "Use enum values exactly: questionType must be MULTIPLE_CHOICE or SHORT_ANSWER; difficultyLevel must be EASY, MEDIUM, HARD, or ADVANCED.",
+    "For MULTIPLE_CHOICE questions, options must contain 4 plausible options and answer must match the correct option content exactly.",
+    "For SHORT_ANSWER questions, options must be an empty array and answer must be a concise model answer.",
+    "Every generated question must follow the requested proportional generation plan exactly, including topic, syllabusTopicSlug, subTopic, difficulty, questionType, and count.",
     "For non-verbal reasoning, use clean SVG content for visual stimuli and options.",
     "For English comprehension, include the passage in stimulus and never omit it.",
     "Questions must be age-appropriate, unambiguous, original, and suitable for timed 11+ exam practice.",
     `Subject: ${input.subject}.`,
-    `Question type: ${input.questionType}.`,
-    `Difficulty: ${input.difficulty}.`,
+    `Question types selected: ${(input.questionTypes?.length ? input.questionTypes : [input.questionType]).join(", ")}.`,
+    `Difficulty levels selected: ${(input.difficulties?.length ? input.difficulties : [input.difficulty]).join(", ")}.`,
     `Total count: ${input.count}.`,
+    "Desired import-ready JSON example:",
+    "{\"questions\":[{\"questionType\":\"MULTIPLE_CHOICE\",\"difficultyLevel\":\"MEDIUM\",\"topic\":\"Fractions, Decimals & Percentages\",\"syllabusTopicSlug\":\"fractions-decimals-percentages\",\"microTopic\":\"Equivalent Fractions\",\"instruction\":\"Choose the best answer.\",\"stimulus\":null,\"questionData\":{\"mode\":\"text\",\"content\":\"Which fraction is equivalent to 3/4?\"},\"options\":[{\"mode\":\"text\",\"content\":\"6/8\"},{\"mode\":\"text\",\"content\":\"4/6\"},{\"mode\":\"text\",\"content\":\"3/8\"},{\"mode\":\"text\",\"content\":\"7/12\"}],\"answer\":\"6/8\",\"explanation\":\"Multiplying numerator and denominator by 2 gives 6/8.\",\"skillTags\":[\"equivalent fractions\"],\"estimatedSeconds\":60,\"marksAvailable\":1,\"scoringWeight\":1}]}",
     "Generate in this exact proportional plan:",
-    ...generationPlan.map((item) => `- ${item.count} question(s): topic=${item.topic}; syllabusTopicSlug=${item.syllabusTopicSlug}; subTopic=${item.subTopic}`)
+    ...generationPlan.map((item) => `- ${item.count} question(s): topic=${item.topic}; syllabusTopicSlug=${item.syllabusTopicSlug}; subTopic=${item.subTopic}; difficulty=${item.difficulty}; questionType=${item.questionType}`)
   ].join("\n");
 }
 
@@ -880,8 +901,8 @@ function parseGeneratedQuestions(input: QuestionGenerationInput, text: string) {
       return enrichQuestionSyllabus({
         id: uid("q_admin_llm"),
         subjectType: input.subject,
-        questionType: input.questionType,
-        difficultyLevel: input.difficulty,
+        questionType: question.questionType ?? input.questionType,
+        difficultyLevel: question.difficultyLevel ?? input.difficulty,
         topic: topic.name,
         syllabusTopicSlug: topic.slug,
         microTopic: question.microTopic ?? input.microTopic,
