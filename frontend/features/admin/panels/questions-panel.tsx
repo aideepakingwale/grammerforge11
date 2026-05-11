@@ -1,0 +1,375 @@
+"use client";
+
+import { useState } from "react";
+import { BookOpen, CalendarClock, Save, Wand2 } from "lucide-react";
+import { Button } from "@/frontend/shared/ui/button";
+import { syllabusRegistry } from "@/backend/syllabus/registry";
+import type {
+  Difficulty,
+  LlmGenerationMeta,
+  PlatformConfig,
+  Question,
+  QuestionBankStats,
+  QuestionGenerationJob,
+  QuestionGenerationSchedule,
+  QuestionType,
+  Subject
+} from "@/backend/shared/types";
+
+type Mutate = (url: string, options: RequestInit, success: string) => Promise<void>;
+
+type Props = {
+  initial?: {
+    stats: QuestionBankStats;
+    llmQuota: PlatformConfig["llmQuota"];
+    schedule: QuestionGenerationSchedule;
+    jobs: QuestionGenerationJob[];
+  };
+  mutate: Mutate;
+};
+
+export function QuestionsPanel({ initial, mutate }: Props) {
+  const [subject, setSubject] = useState<Subject>("MATHS");
+  const [topic, setTopic] = useState(syllabusRegistry.MATHS[0].name);
+  const [selectedSubTopics, setSelectedSubTopics] = useState<string[]>([]);
+  const [selectedDifficulties, setSelectedDifficulties] = useState<Difficulty[]>(["MEDIUM"]);
+  const [selectedQuestionTypes, setSelectedQuestionTypes] = useState<QuestionType[]>(["MULTIPLE_CHOICE"]);
+  const [count, setCount] = useState(10);
+  const [provider, setProvider] = useState<"GEMINI" | "GROQ" | "INTERNAL">("GEMINI");
+  const [prompt, setPrompt] = useState("");
+  const [candidates, setCandidates] = useState<Question[]>([]);
+  const [selectedQuestionIds, setSelectedQuestionIds] = useState<string[]>([]);
+  const [generationMeta, setGenerationMeta] = useState<LlmGenerationMeta | null>(null);
+  const [working, setWorking] = useState("");
+  const [localError, setLocalError] = useState("");
+
+  const fallback: QuestionGenerationSchedule = {
+    enabled: false,
+    subject: "MATHS",
+    difficulty: "MEDIUM",
+    questionType: "MULTIPLE_CHOICE",
+    count: 10,
+    microTopic: "Mixed 11+ Practice",
+    provider: "GEMINI",
+    frequency: "DAILY",
+    runAt: "02:00",
+    updatedAt: new Date().toISOString()
+  };
+  const stats = initial?.stats;
+  const llmQuota = initial?.llmQuota ?? [];
+  const schedule = initial?.schedule ?? fallback;
+  const jobs = initial?.jobs ?? [];
+  const topics = syllabusRegistry[subject];
+  const selectedTopic = topics.find((item) => item.name === topic) ?? topics[0];
+  const visibleSubTopics = selectedTopic?.subTopics ?? [];
+
+  const generationPayload = {
+    subject,
+    difficulty: selectedDifficulties[0] ?? "MEDIUM",
+    questionType: selectedQuestionTypes[0] ?? "MULTIPLE_CHOICE",
+    count,
+    microTopic: selectedSubTopics[0] ?? selectedTopic?.subTopics[0] ?? selectedTopic?.name ?? "Mixed 11+ Practice",
+    topic,
+    subTopics: selectedSubTopics.length ? selectedSubTopics : visibleSubTopics.slice(0, Math.min(4, visibleSubTopics.length)),
+    difficulties: selectedDifficulties,
+    questionTypes: selectedQuestionTypes,
+    provider
+  };
+
+  function changeSubject(nextSubject: Subject) {
+    const firstTopic = syllabusRegistry[nextSubject][0];
+    setSubject(nextSubject);
+    setTopic(firstTopic.name);
+    setSelectedSubTopics([]);
+    setPrompt("");
+    setCandidates([]);
+    setSelectedQuestionIds([]);
+    setGenerationMeta(null);
+  }
+
+  function toggleListValue<T extends string>(value: T, setter: (updater: (current: T[]) => T[]) => void) {
+    setter((current) => {
+      const next = current.includes(value) ? current.filter((item) => item !== value) : [...current, value];
+      return next.length ? next : [value];
+    });
+  }
+
+  async function previewPrompt() {
+    setWorking("preview");
+    setLocalError("");
+    const response = await fetch("/api/admin/questions/preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(generationPayload)
+    });
+    const json = await response.json();
+    setWorking("");
+    if (!response.ok) return setLocalError(json.error ?? "Could not preview prompt");
+    setPrompt(json.prompt);
+  }
+
+  async function generateCandidates() {
+    setWorking("generate");
+    setLocalError("");
+    const response = await fetch("/api/admin/questions/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...generationPayload, promptOverride: prompt || undefined })
+    });
+    const json = await response.json();
+    setWorking("");
+    if (!response.ok) return setLocalError(json.error ?? "Could not generate questions");
+    setPrompt(json.prompt);
+    setCandidates(json.questions ?? []);
+    setSelectedQuestionIds((json.questions ?? []).map((question: Question) => question.id));
+    setGenerationMeta(json.generationMeta ?? null);
+  }
+
+  async function importSelected() {
+    const questions = candidates.filter((question) => selectedQuestionIds.includes(question.id));
+    if (!questions.length) return setLocalError("Select at least one generated question to import.");
+    setWorking("import");
+    setLocalError("");
+    await mutate("/api/admin/questions/import", { method: "POST", body: JSON.stringify({ questions }) }, `${questions.length} question(s) imported`);
+    setWorking("");
+    setCandidates([]);
+    setSelectedQuestionIds([]);
+    setGenerationMeta(null);
+  }
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-[420px_1fr]">
+      <div className="space-y-4">
+        <GuidedControls
+          subject={subject}
+          topic={topic}
+          selectedSubTopics={selectedSubTopics}
+          selectedDifficulties={selectedDifficulties}
+          selectedQuestionTypes={selectedQuestionTypes}
+          count={count}
+          provider={provider}
+          topics={topics}
+          visibleSubTopics={visibleSubTopics}
+          working={working}
+          onSubjectChange={changeSubject}
+          onTopicChange={(value) => { setTopic(value); setSelectedSubTopics([]); }}
+          onSubTopicToggle={(value) => setSelectedSubTopics((current) => current.includes(value) ? current.filter((item) => item !== value) : [...current, value])}
+          onDifficultyToggle={(value) => toggleListValue(value, setSelectedDifficulties)}
+          onQuestionTypeToggle={(value) => toggleListValue(value, setSelectedQuestionTypes)}
+          onCountChange={setCount}
+          onProviderChange={setProvider}
+          onPreview={() => void previewPrompt()}
+        />
+        <ScheduleForm schedule={schedule} mutate={mutate} />
+      </div>
+
+      <div className="space-y-4">
+        <PromptApproval prompt={prompt} setPrompt={setPrompt} working={working} generateCandidates={generateCandidates} localError={localError} />
+        {candidates.length > 0 && (
+          <GeneratedReview
+            candidates={candidates}
+            selectedQuestionIds={selectedQuestionIds}
+            generationMeta={generationMeta}
+            toggleQuestion={(questionId) => setSelectedQuestionIds((current) => current.includes(questionId) ? current.filter((id) => id !== questionId) : [...current, questionId])}
+            importSelected={importSelected}
+            working={working}
+          />
+        )}
+        <QuestionBankStatus stats={stats} schedule={schedule} llmQuota={llmQuota} />
+        <GenerationJobs jobs={jobs} />
+      </div>
+    </div>
+  );
+}
+
+function GuidedControls(props: {
+  subject: Subject;
+  topic: string;
+  selectedSubTopics: string[];
+  selectedDifficulties: Difficulty[];
+  selectedQuestionTypes: QuestionType[];
+  count: number;
+  provider: "GEMINI" | "GROQ" | "INTERNAL";
+  topics: Array<{ slug: string; name: string }>;
+  visibleSubTopics: string[];
+  working: string;
+  onSubjectChange: (value: Subject) => void;
+  onTopicChange: (value: string) => void;
+  onSubTopicToggle: (value: string) => void;
+  onDifficultyToggle: (value: Difficulty) => void;
+  onQuestionTypeToggle: (value: QuestionType) => void;
+  onCountChange: (value: number) => void;
+  onProviderChange: (value: "GEMINI" | "GROQ" | "INTERNAL") => void;
+  onPreview: () => void;
+}) {
+  return (
+    <div className="premium-card p-4">
+      <div className="flex items-center gap-2"><Wand2 className="text-teal" size={22} /><h2 className="text-xl font-black">Guided question generation</h2></div>
+      <p className="mt-2 text-sm font-semibold leading-6 text-ink/60">Select syllabus coverage, preview the prompt, then import only approved questions.</p>
+      <div className="mt-4 grid gap-3">
+        <select className="field" value={props.subject} onChange={(event) => props.onSubjectChange(event.target.value as Subject)}>
+          <option value="MATHS">Maths</option><option value="ENGLISH">English</option><option value="VERBAL_REASONING">Verbal Reasoning</option><option value="NON_VERBAL_REASONING">Non-Verbal Reasoning</option>
+        </select>
+        <select className="field" value={props.topic} onChange={(event) => props.onTopicChange(event.target.value)}>
+          {props.topics.map((item) => <option key={item.slug} value={item.name}>{item.name}</option>)}
+        </select>
+        <MultiSelect title="Subtopics, multi-select allowed" values={props.visibleSubTopics} selected={props.selectedSubTopics} onToggle={props.onSubTopicToggle} />
+        <div className="grid gap-3 md:grid-cols-2">
+          <MultiSelect title="Difficulty mix" values={["EASY", "MEDIUM", "HARD", "ADVANCED"] as Difficulty[]} selected={props.selectedDifficulties} onToggle={props.onDifficultyToggle} />
+          <MultiSelect title="Question type mix" values={["MULTIPLE_CHOICE", "SHORT_ANSWER"] as QuestionType[]} selected={props.selectedQuestionTypes} onToggle={props.onQuestionTypeToggle} format={(value) => value.replaceAll("_", " ")} />
+        </div>
+        <div className="grid grid-cols-[1fr_110px] gap-2">
+          <select className="field" value={props.provider} onChange={(event) => props.onProviderChange(event.target.value as "GEMINI" | "GROQ" | "INTERNAL")}>
+            <option value="GEMINI">Gemini</option><option value="GROQ">Groq</option><option value="INTERNAL">Internal fallback</option>
+          </select>
+          <input className="field" type="number" min={1} max={100} value={props.count} onChange={(event) => props.onCountChange(Number(event.target.value))} />
+        </div>
+        <Button type="button" className="w-full" onClick={props.onPreview} disabled={props.working === "preview"}><BookOpen size={16} /> {props.working === "preview" ? "Preparing prompt..." : "Preview generation prompt"}</Button>
+      </div>
+    </div>
+  );
+}
+
+function MultiSelect<T extends string>({ title, values, selected, onToggle, format = (value: T) => value }: { title: string; values: T[]; selected: T[]; onToggle: (value: T) => void; format?: (value: T) => string }) {
+  return (
+    <div className="max-h-52 overflow-y-auto rounded-md border border-ink/10 bg-white p-2">
+      <p className="mb-2 text-xs font-black uppercase text-ink/45">{title}</p>
+      <div className="grid gap-2">
+        {values.map((value) => (
+          <label key={value} className="flex items-center gap-2 rounded-md bg-paper px-3 py-2 text-sm font-bold">
+            <input type="checkbox" checked={selected.includes(value)} onChange={() => onToggle(value)} /> {format(value)}
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PromptApproval({ prompt, setPrompt, working, generateCandidates, localError }: { prompt: string; setPrompt: (value: string) => void; working: string; generateCandidates: () => Promise<void>; localError: string }) {
+  return (
+    <div className="premium-card p-4">
+      <h2 className="text-xl font-black">Prompt approval</h2>
+      <textarea className="field mt-3 min-h-80 font-mono text-xs leading-5" value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="Click Preview generation prompt to build the prompt." />
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button type="button" onClick={() => void generateCandidates()} disabled={!prompt || working === "generate"}><Wand2 size={16} /> {working === "generate" ? "Generating..." : "Generate candidates"}</Button>
+        <button type="button" className="inline-flex min-h-11 items-center rounded-md border border-ink/10 px-4 text-sm font-black" onClick={() => setPrompt("")}>Clear prompt</button>
+      </div>
+      {localError && <p className="mt-3 rounded-md bg-coral/10 p-3 text-sm font-bold text-coral">{localError}</p>}
+    </div>
+  );
+}
+
+function GeneratedReview({ candidates, selectedQuestionIds, generationMeta, toggleQuestion, importSelected, working }: { candidates: Question[]; selectedQuestionIds: string[]; generationMeta: LlmGenerationMeta | null; toggleQuestion: (id: string) => void; importSelected: () => Promise<void>; working: string }) {
+  return (
+    <div className="premium-card p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div><h2 className="text-xl font-black">Generated question review</h2><p className="mt-1 text-sm font-semibold text-ink/55">Select questions to import into the master question bank.</p></div>
+        <Button type="button" onClick={() => void importSelected()} disabled={working === "import"}><Save size={16} /> Import selected ({selectedQuestionIds.length})</Button>
+      </div>
+      {generationMeta && <GenerationMetaPanel meta={generationMeta} />}
+      <div className="mt-4 space-y-3">
+        {candidates.map((question, index) => (
+          <div key={question.id} className="rounded-md border border-ink/10 bg-white p-4">
+            <label className="flex items-start gap-3">
+              <input className="mt-1 h-5 w-5 accent-teal" type="checkbox" checked={selectedQuestionIds.includes(question.id)} onChange={() => toggleQuestion(question.id)} />
+              <span><span className="font-black">Question {index + 1}: {question.topic} / {question.microTopic}</span><span className="mt-1 block text-sm font-semibold text-ink/60">{question.instruction}</span></span>
+            </label>
+            {question.stimulus && <div className="mt-3 rounded-md bg-paper p-3"><p className="text-xs font-black uppercase text-ink/45">{question.stimulus.title}</p><p className="mt-1 whitespace-pre-wrap text-sm leading-6">{question.stimulus.content}</p></div>}
+            <p className="mt-3 font-semibold">{question.questionData.content}</p>
+            {question.options.length > 0 && <div className="mt-3 grid gap-2 md:grid-cols-2">{question.options.map((option, optionIndex) => <div key={`${question.id}-${optionIndex}`} className="rounded-md border border-ink/10 bg-paper p-2 text-sm font-semibold">{String.fromCharCode(65 + optionIndex)}. {option.content}</div>)}</div>}
+            <div className="mt-3 rounded-md bg-teal/10 p-3 text-sm"><p className="font-black text-teal">Answer: {question.answer}</p><p className="mt-1 leading-6 text-ink/70">{question.explanation}</p></div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function GenerationMetaPanel({ meta }: { meta: LlmGenerationMeta }) {
+  return (
+    <div className="mt-4 grid gap-3 rounded-md border border-teal/20 bg-teal/10 p-3 md:grid-cols-4">
+      <div><p className="text-xs font-black uppercase text-teal">Provider</p><p className="mt-1 font-black">{meta.actualProvider}</p><p className="text-xs font-semibold text-ink/55">{meta.source.replaceAll("_", " ")}</p></div>
+      <div><p className="text-xs font-black uppercase text-teal">Questions</p><p className="mt-1 font-black">{meta.requestedCount} requested</p><p className="text-xs font-semibold text-ink/55">{meta.llmReturnedCount} LLM, {meta.fallbackCount} fallback</p></div>
+      {meta.groq && <><div><p className="text-xs font-black uppercase text-teal">Groq requests</p><p className="mt-1 font-black">{meta.groq.remainingRequests ?? "-"} remaining</p><p className="text-xs font-semibold text-ink/55">limit {meta.groq.limitRequests ?? "-"}, reset {meta.groq.resetRequests ?? "-"}</p></div><div><p className="text-xs font-black uppercase text-teal">Groq tokens</p><p className="mt-1 font-black">{meta.groq.remainingTokens ?? "-"} remaining</p><p className="text-xs font-semibold text-ink/55">limit {meta.groq.limitTokens ?? "-"}, reset {meta.groq.resetTokens ?? "-"}</p></div></>}
+      {meta.gemini && <><div><p className="text-xs font-black uppercase text-teal">Gemini tokens</p><p className="mt-1 font-black">{meta.gemini.totalTokenCount ?? "-"} used</p><p className="text-xs font-semibold text-ink/55">prompt {meta.gemini.promptTokenCount ?? "-"}, answer {meta.gemini.candidatesTokenCount ?? "-"}</p></div><div><p className="text-xs font-black uppercase text-teal">Gemini quota</p><p className="mt-1 font-black">Tracked app-side</p><p className="text-xs font-semibold text-ink/55">Exact remaining quota is checked in Google AI Studio.</p></div></>}
+    </div>
+  );
+}
+
+function QuestionBankStatus({ stats, schedule, llmQuota }: { stats?: QuestionBankStats; schedule: QuestionGenerationSchedule; llmQuota: PlatformConfig["llmQuota"] }) {
+  return (
+    <>
+      <div className="premium-card p-4">
+        <h2 className="text-xl font-black">Question bank status</h2>
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <Metric label="Total questions" value={stats?.total ?? 0} />
+          <Metric label="LLM generated" value={stats?.llmGenerated ?? 0} />
+          <Metric label="Next scheduled run" value={schedule.nextRunAt ? new Date(schedule.nextRunAt).toLocaleString() : "-"} />
+        </div>
+      </div>
+      <div className="premium-card p-4">
+        <h2 className="text-xl font-black">LLM quota status</h2>
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          {llmQuota.map((quota) => <Metric key={quota.provider} label={`${quota.provider} remaining`} value={quota.remainingToday === null ? "∞" : quota.remainingToday} sub={`Used ${quota.usedToday}`} />)}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function Metric({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
+  return <div className="rounded-md bg-paper p-3"><p className="text-2xl font-black">{value}</p><p className="text-sm font-bold text-ink/55">{label}</p>{sub && <p className="text-xs font-semibold text-ink/45">{sub}</p>}</div>;
+}
+
+function GenerationJobs({ jobs }: { jobs: QuestionGenerationJob[] }) {
+  return (
+    <div className="premium-card p-4">
+      <h2 className="text-xl font-black">Generation jobs</h2>
+      <div className="mt-3 space-y-2">
+        {jobs.length === 0 && <p className="text-sm font-semibold text-ink/55">No generation jobs yet.</p>}
+        {jobs.map((job) => (
+          <div key={job.id} className="rounded-md border border-ink/10 bg-white p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2"><p className="font-black">{job.subject.replaceAll("_", " ")} / {job.microTopic}</p><span className="chip">{job.status}</span></div>
+            <p className="mt-1 text-sm font-semibold text-ink/60">{job.generatedCount}/{job.count} generated via {job.provider} at {new Date(job.createdAt).toLocaleString()}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ScheduleForm({ schedule, mutate }: { schedule: QuestionGenerationSchedule; mutate: Mutate }) {
+  return (
+    <form
+      className="premium-card p-4"
+      action={(formData) => {
+        const payload = {
+          enabled: formData.get("enabled") === "on",
+          subject: String(formData.get("subject")),
+          difficulty: String(formData.get("difficulty")),
+          questionType: String(formData.get("questionType")),
+          count: Number(formData.get("count")),
+          microTopic: String(formData.get("microTopic")),
+          provider: String(formData.get("provider")),
+          frequency: String(formData.get("frequency")),
+          runAt: String(formData.get("runAt"))
+        };
+        void mutate("/api/admin/questions/schedule", { method: "PATCH", body: JSON.stringify(payload) }, "Question generation schedule saved");
+      }}
+    >
+      <div className="flex items-center gap-2"><CalendarClock className="text-gold" size={22} /><h2 className="text-xl font-black">Scheduled generation job</h2></div>
+      <div className="mt-4 grid gap-3">
+        <label className="flex items-center justify-between rounded-md bg-paper px-3 py-2 text-sm font-black">Enable scheduled job<input name="enabled" type="checkbox" defaultChecked={schedule.enabled} /></label>
+        <select className="field" name="frequency" defaultValue={schedule.frequency}><option value="DAILY">Daily</option><option value="WEEKLY">Weekly</option></select>
+        <input className="field" name="runAt" type="time" defaultValue={schedule.runAt} />
+        <select className="field" name="subject" defaultValue={schedule.subject}><option value="MATHS">Maths</option><option value="ENGLISH">English</option><option value="VERBAL_REASONING">Verbal Reasoning</option><option value="NON_VERBAL_REASONING">Non-Verbal Reasoning</option></select>
+        <select className="field" name="difficulty" defaultValue={schedule.difficulty}><option value="EASY">Easy</option><option value="MEDIUM">Medium</option><option value="HARD">Hard</option><option value="ADVANCED">Advanced</option></select>
+        <select className="field" name="questionType" defaultValue={schedule.questionType}><option value="MULTIPLE_CHOICE">Multiple choice</option><option value="SHORT_ANSWER">Short answer</option></select>
+        <input className="field" name="microTopic" defaultValue={schedule.microTopic} />
+        <input className="field" name="count" type="number" min={1} max={100} defaultValue={schedule.count} />
+        <select className="field" name="provider" defaultValue={schedule.provider}><option value="GEMINI">Gemini</option><option value="GROQ">Groq</option><option value="INTERNAL">Internal fallback</option></select>
+        <Button className="w-full"><Save size={16} /> Save schedule</Button>
+      </div>
+    </form>
+  );
+}

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/backend/auth/session";
-import { getPlatformConfig, updatePlatformConfig } from "@/backend/exams/demo-store";
+import { getPlatformConfig, updatePlatformConfig } from "@/backend/admin/platform-config-service";
 
 const schema = z.object({
   activeLlmProvider: z.enum(["GEMINI", "GROQ", "INTERNAL"]).optional(),

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireUser } from "@/backend/auth/session";
 import { dashboardInsights } from "@/backend/ai/insights";
 import { findUser, listStudentsFor } from "@/backend/auth/users";
-import { planHasFeature } from "@/backend/exams/demo-store";
+import { planHasFeature } from "@/backend/plans/plan-service";
 
 const schema = z.object({
   audience: z.enum(["parent", "student"]),

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/backend/auth/session";
-import { adminDeleteUser, adminUpdateUser } from "@/backend/exams/demo-store";
+import { adminDeleteUser, adminUpdateUser } from "@/backend/admin/user-admin-service";
 
 const schema = z.object({
   email: z.string().email().optional(),

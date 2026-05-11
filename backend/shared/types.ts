@@ -51,6 +51,28 @@ export type PlatformConfig = {
   updatedAt: string;
 };
 
+export type LlmGenerationMeta = {
+  requestedProvider: LlmProvider;
+  actualProvider: LlmProvider;
+  source: "LLM" | "INTERNAL_FALLBACK";
+  requestedCount: number;
+  llmReturnedCount: number;
+  fallbackCount: number;
+  groq?: {
+    remainingRequests?: string | null;
+    remainingTokens?: string | null;
+    limitRequests?: string | null;
+    limitTokens?: string | null;
+    resetRequests?: string | null;
+    resetTokens?: string | null;
+  };
+  gemini?: {
+    promptTokenCount?: number;
+    candidatesTokenCount?: number;
+    totalTokenCount?: number;
+  };
+};
+
 export type PlanFeatureKey =
   | "STANDARD_EXAMS"
   | "AI_SHORT_ANSWER_EVALUATION"

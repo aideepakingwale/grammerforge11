@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
-import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, PolarAngleAxis, RadialBar, RadialBarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { CreditCard, FileText, Link, Sparkles, Target, TrendingUp, Users } from "lucide-react";
 import { Button } from "@/frontend/shared/ui/button";
 import { ExamLauncher } from "@/frontend/features/exams/exam-launcher";
@@ -26,6 +26,8 @@ type ParentData = {
     focusAreas: PerformanceRow[];
   };
 };
+
+const chartColors = ["#4f46e5", "#06b6d4", "#10b981", "#f59e0b", "#e11d48", "#8b5cf6"];
 
 export function ParentDashboard() {
   const [data, setData] = useState<ParentData | null>(null);
@@ -54,6 +56,8 @@ export function ParentDashboard() {
     if (!data?.exams.length) return 0;
     return Math.round(data.exams.reduce((sum, exam) => sum + (exam.score ?? 0), 0) / data.exams.length);
   }, [data]);
+
+  const readiness = useMemo(() => [{ name: "Readiness", value: average, fill: average >= 75 ? "#10b981" : average >= 55 ? "#f59e0b" : "#e11d48" }], [average]);
 
   async function checkout(tier: Tier) {
     const response = await fetch("/api/billing/checkout", {
@@ -151,49 +155,73 @@ export function ParentDashboard() {
           </section>
         )}
 
-        <div className="grid gap-4 lg:grid-cols-[1.25fr_.75fr]">
-          <section className="premium-card p-4">
+        <div className="grid gap-4 lg:grid-cols-[1.15fr_.85fr]">
+          <section className="chart-card">
             <div className="mb-3 flex items-center gap-2 font-black"><TrendingUp size={18} /> Score Trend</div>
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={trend}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(23,33,31,.08)" />
+                <AreaChart data={trend}>
+                  <defs>
+                    <linearGradient id="scoreTrend" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.32} />
+                      <stop offset="95%" stopColor="#4f46e5" stopOpacity={0.02} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(23,32,51,.08)" />
                   <XAxis dataKey="name" tickLine={false} />
                   <YAxis domain={[0, 100]} tickLine={false} />
                   <Tooltip />
-                  <Line type="monotone" dataKey="score" stroke="#1e6f73" strokeWidth={3} dot={{ r: 4 }} />
-                </LineChart>
+                  <Area type="monotone" dataKey="score" stroke="#4f46e5" strokeWidth={3} fill="url(#scoreTrend)" dot={{ r: 4, fill: "#4f46e5" }} />
+                </AreaChart>
               </ResponsiveContainer>
             </div>
           </section>
 
-          <section className="premium-card p-4">
-            <div className="mb-3 flex items-center gap-2 font-black"><Target size={18} /> Subject Accuracy</div>
-            <div className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={subjects}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(23,33,31,.08)" />
-                  <XAxis dataKey="label" tickLine={false} />
-                  <YAxis domain={[0, 100]} tickLine={false} />
-                  <Tooltip />
-                  <Bar dataKey="accuracy" fill="#d4a13a" radius={[6, 6, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+          <section className="chart-card">
+            <div className="mb-3 flex items-center gap-2 font-black"><Target size={18} /> Readiness and subject accuracy</div>
+            <div className="grid gap-3 md:grid-cols-[170px_1fr]">
+              <div className="h-56">
+                <ResponsiveContainer width="100%" height="100%">
+                  <RadialBarChart innerRadius="72%" outerRadius="100%" data={readiness} startAngle={90} endAngle={-270}>
+                    <PolarAngleAxis type="number" domain={[0, 100]} tick={false} />
+                    <RadialBar dataKey="value" cornerRadius={12} background={{ fill: "#eef2ff" }} />
+                  </RadialBarChart>
+                </ResponsiveContainer>
+                <div className="-mt-32 text-center">
+                  <p className="text-3xl font-black">{average}%</p>
+                  <p className="text-xs font-black uppercase text-ink/45">Readiness</p>
+                </div>
+              </div>
+              <div className="h-56">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={subjects}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(23,32,51,.08)" />
+                    <XAxis dataKey="label" tickLine={false} />
+                    <YAxis domain={[0, 100]} tickLine={false} />
+                    <Tooltip />
+                    <Bar dataKey="accuracy" radius={[8, 8, 0, 0]}>
+                      {subjects.map((subject, index) => <Cell key={subject.key} fill={chartColors[index % chartColors.length]} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             </div>
           </section>
         </div>
 
         <div className="mt-4 grid gap-4 lg:grid-cols-3">
-          <section className="premium-card p-4 lg:col-span-2">
+          <section className="chart-card lg:col-span-2">
             <div className="mb-3 flex items-center gap-2 font-black"><Target size={18} /> Topic Breakdown</div>
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={topics}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(23,33,31,.08)" />
-                  <XAxis dataKey="topic" tickLine={false} hide />
-                  <YAxis domain={[0, 100]} tickLine={false} />
+                <BarChart data={topics} layout="vertical" margin={{ left: 8, right: 12 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(23,32,51,.08)" />
+                  <XAxis type="number" domain={[0, 100]} tickLine={false} />
+                  <YAxis type="category" dataKey="label" width={126} tickLine={false} />
                   <Tooltip labelFormatter={(_, rows) => rows?.[0]?.payload?.label ?? "Topic"} />
-                  <Bar dataKey="accuracy" fill="#1e6f73" radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="accuracy" radius={[0, 8, 8, 0]}>
+                    {topics.map((topic, index) => <Cell key={topic.key} fill={chartColors[(index + 1) % chartColors.length]} />)}
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>

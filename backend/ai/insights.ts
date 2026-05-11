@@ -1,7 +1,8 @@
 import { Redis } from "@upstash/redis";
 import type { Exam, LlmProvider, SafeUser } from "@/backend/shared/types";
 import { buildPerformanceAnalytics } from "@/backend/analytics/performance";
-import { examsForStudent, getPlatformConfig, upsertInsight } from "@/backend/exams/demo-store";
+import { examsForStudent, upsertInsight } from "@/backend/exams/demo-store";
+import { getPlatformConfig } from "@/backend/admin/platform-config-service";
 
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN

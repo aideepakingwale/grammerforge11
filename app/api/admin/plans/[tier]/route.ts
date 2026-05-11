@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/backend/auth/session";
-import { updatePlan } from "@/backend/exams/demo-store";
+import { updatePlan } from "@/backend/plans/plan-service";
 
 const featureSchema = z.record(z.string(), z.boolean());
 const schema = z.object({

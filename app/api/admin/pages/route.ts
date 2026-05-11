@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/backend/auth/session";
-import { listPublicPages, upsertPublicPage } from "@/backend/exams/demo-store";
+import { listPublicPages, upsertPublicPage } from "@/backend/admin/public-pages-service";
 
 const schema = z.object({
   slug: z.string().min(1).regex(/^[a-z0-9-]+$/),

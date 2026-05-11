@@ -9,21 +9,21 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        ink: "#17211f",
-        paper: "#f4f7f6",
-        pearl: "#fbfcfb",
-        line: "#dfe7e4",
-        moss: "#5a7b61",
-        teal: "#116b70",
-        mint: "#8fd3c7",
-        coral: "#df6b57",
-        gold: "#c9952b",
-        lilac: "#8d7adf",
-        skysoft: "#e2f2f4"
+        ink: "#172033",
+        paper: "#f3f5fb",
+        pearl: "#ffffff",
+        line: "#d9e0ec",
+        moss: "#10b981",
+        teal: "#4f46e5",
+        mint: "#eafaf3",
+        coral: "#e11d48",
+        gold: "#f59e0b",
+        lilac: "#8b5cf6",
+        skysoft: "#eef2ff"
       },
       boxShadow: {
-        soft: "0 18px 55px rgba(23, 33, 31, 0.12)",
-        lift: "0 24px 70px rgba(23, 33, 31, 0.16)"
+        soft: "0 1px 2px rgba(24, 36, 51, 0.08)",
+        lift: "0 8px 24px rgba(24, 36, 51, 0.10)"
       }
     }
   },

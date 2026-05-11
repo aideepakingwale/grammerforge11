@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { currentUser } from "@/backend/auth/session";
-import { getExam, planHasFeature } from "@/backend/exams/demo-store";
+import { getExam } from "@/backend/exams/demo-store";
+import { planHasFeature } from "@/backend/plans/plan-service";
 import { ExamEngine } from "@/frontend/features/exams/exam-engine";
 
 export default async function ExamPage({ params }: { params: Promise<{ id: string }> }) {

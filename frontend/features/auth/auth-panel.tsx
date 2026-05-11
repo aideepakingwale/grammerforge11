@@ -65,7 +65,7 @@ export function AuthPanel() {
         <div className="rounded-full bg-gold/15 px-2.5 py-1 text-xs font-extrabold text-gold">11+</div>
       </div>
 
-      <div className="mb-4 grid grid-cols-2 gap-1 rounded-md border border-ink/10 bg-paper p-1">
+      <div className="mb-4 grid grid-cols-2 gap-1 rounded-md border border-line bg-paper p-1">
         <button type="button" className={mode === "login" ? "rounded bg-white p-2.5 text-sm font-bold shadow-sm" : "p-2.5 text-sm font-bold text-ink/55"} onClick={() => setMode("login")}>
           Login
         </button>
@@ -100,12 +100,12 @@ export function AuthPanel() {
         </Button>
       </form>
 
-      <div className="mt-5 rounded-md bg-ink p-3 text-sm text-white">
-        <div className="flex items-center gap-2 font-bold">
+      <div className="mt-5 rounded-md border border-line bg-skysoft p-3 text-sm text-ink">
+        <div className="flex items-center gap-2 font-bold text-teal">
           <GraduationCap size={24} />
           Account security
         </div>
-        <p className="mt-1 text-white/70">New accounts must confirm a real email address before sign-in is enabled.</p>
+        <p className="mt-1 text-ink/65">New accounts must confirm a real email address before sign-in is enabled.</p>
       </div>
     </section>
   );

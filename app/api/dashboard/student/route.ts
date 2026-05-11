@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/backend/auth/session";
 import { dashboardInsights } from "@/backend/ai/insights";
-import { examsForStudent, getPlanForTier } from "@/backend/exams/demo-store";
+import { examsForStudent } from "@/backend/exams/demo-store";
+import { getPlanForTier } from "@/backend/plans/plan-service";
 
 export async function GET() {
   const user = await requireUser(["STUDENT"]);

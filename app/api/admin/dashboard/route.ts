@@ -1,13 +1,11 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/backend/auth/session";
-import {
-  adminListUsers,
-  getPlatformConfig,
-  listPlans,
-  listPublicPages,
-  platformAnalytics,
-  questionGenerationAdminState
-} from "@/backend/exams/demo-store";
+import { adminListUsers } from "@/backend/admin/user-admin-service";
+import { getPlatformConfig } from "@/backend/admin/platform-config-service";
+import { listPlans } from "@/backend/plans/plan-service";
+import { listPublicPages } from "@/backend/admin/public-pages-service";
+import { platformAnalytics } from "@/backend/admin/platform-analytics-service";
+import { questionGenerationAdminState } from "@/backend/exams/demo-store";
 
 export async function GET() {
   await requireUser(["ADMIN"]);

@@ -2,11 +2,9 @@ import bcrypt from "bcryptjs";
 import { questionBank } from "@/backend/questions/question-bank";
 import { examPatternFor } from "@/backend/exams/exam-patterns";
 import type {
-  AdminUserInput,
   AuditEvent,
   Exam,
   Insight,
-  PlatformAnalytics,
   PlatformConfig,
   PublicPage,
   QuestionBankStats,
@@ -16,6 +14,7 @@ import type {
   SubscriptionPlanConfig,
   Tier,
   Difficulty,
+  LlmGenerationMeta,
   LlmProvider,
   Question,
   QuestionGenerationJob,
@@ -24,8 +23,20 @@ import type {
 } from "@/backend/shared/types";
 import { normaliseAnswer, uid } from "@/backend/shared/utils";
 import { enrichQuestionSyllabus, syllabusRegistry, topicForSubTopic } from "@/backend/syllabus/registry";
+import {
+  defaultPlatformConfig,
+  defaultPlans,
+  defaultPublicPages,
+  defaultQuestionGenerationSchedule,
+  nextScheduleRun
+} from "@/backend/platform/defaults";
 
 type StoredUser = SafeUser & { passwordHash: string };
+
+type GeneratedQuestionResult = {
+  questions: Question[];
+  meta: LlmGenerationMeta;
+};
 
 type Store = {
   users: StoredUser[];
@@ -46,211 +57,6 @@ declare global {
 const parentId = "user_parent_demo";
 const studentId = "user_student_demo";
 const adminId = "user_admin_demo";
-
-function mask(value: string | undefined, fallback: string) {
-  if (!value) return fallback;
-  if (value.length <= 8) return "****";
-  return `${value.slice(0, 4)}****${value.slice(-4)}`;
-}
-
-function defaultPlatformConfig(): PlatformConfig {
-  const today = new Date();
-  return {
-    activeLlmProvider: "GEMINI",
-    geminiEnabled: true,
-    groqEnabled: true,
-    redisCacheEnabled: Boolean(process.env.UPSTASH_REDIS_REST_URL),
-    aiDailyLimitFree: 3,
-    aiDailyLimitPro: 25,
-    aiDailyLimitPremium: 100,
-    maskedGeminiKey: mask(process.env.GEMINI_API_KEY, "not configured"),
-    maskedGroqKey: mask(process.env.GROQ_API_KEY, "not configured"),
-    maskedStripeKey: mask(process.env.STRIPE_SECRET_KEY, "not configured"),
-    llmQuota: llmQuotaSnapshot(today),
-    updatedAt: new Date().toISOString()
-  };
-}
-
-const defaultFeatures: SubscriptionPlanConfig["features"] = {
-  STANDARD_EXAMS: true,
-  AI_SHORT_ANSWER_EVALUATION: false,
-  STEP_BY_STEP_EXPLANATIONS: false,
-  BASIC_ANALYTICS: true,
-  DEEP_AI_STUDY_PLAN: false,
-  SECURE_PROCTORING: false,
-  UNLIMITED_TARGETED_EXAMS: false,
-  PREDICTIVE_PASS_SCORE: false,
-  EXTERNAL_AI_PROMPT_HELP: false
-};
-
-function defaultPlans(): SubscriptionPlanConfig[] {
-  const now = new Date().toISOString();
-  return [
-    {
-      tier: "FOUNDATION",
-      name: "Foundation",
-      positioning: "The Starting Line",
-      monthlyPricePence: 499,
-      examLimitMonthly: 30,
-      aiInsightLimitMonthly: 2,
-      dailySubjectLimit: 1,
-      questionsPerExam: 10,
-      durationMinutes: 10,
-      allowAllSubjectsDaily: false,
-      allowRepeatSubjectSameDay: false,
-      customExamEnabled: false,
-      customExamMaxQuestions: 0,
-      customExamMaxMinutes: 0,
-      llmCustomExamsPerDay: 0,
-      shareExamEnabled: false,
-      features: { ...defaultFeatures },
-      isActive: true,
-      updatedAt: now
-    },
-    {
-      tier: "ALPHA",
-      name: "Alpha",
-      positioning: "The Status Tier",
-      monthlyPricePence: 999,
-      examLimitMonthly: 25,
-      aiInsightLimitMonthly: 20,
-      dailySubjectLimit: 1,
-      questionsPerExam: 50,
-      durationMinutes: 50,
-      allowAllSubjectsDaily: false,
-      allowRepeatSubjectSameDay: false,
-      customExamEnabled: false,
-      customExamMaxQuestions: 0,
-      customExamMaxMinutes: 0,
-      llmCustomExamsPerDay: 0,
-      shareExamEnabled: false,
-      features: {
-        ...defaultFeatures,
-        AI_SHORT_ANSWER_EVALUATION: true,
-        STEP_BY_STEP_EXPLANATIONS: true,
-        EXTERNAL_AI_PROMPT_HELP: true
-      },
-      isActive: true,
-      updatedAt: now
-    },
-    {
-      tier: "VELOCITY",
-      name: "Velocity",
-      positioning: "The Results Tier",
-      monthlyPricePence: 1999,
-      examLimitMonthly: null,
-      aiInsightLimitMonthly: null,
-      dailySubjectLimit: 4,
-      questionsPerExam: 50,
-      durationMinutes: 50,
-      allowAllSubjectsDaily: true,
-      allowRepeatSubjectSameDay: false,
-      customExamEnabled: false,
-      customExamMaxQuestions: 0,
-      customExamMaxMinutes: 0,
-      llmCustomExamsPerDay: 0,
-      shareExamEnabled: true,
-      features: {
-        STANDARD_EXAMS: true,
-        AI_SHORT_ANSWER_EVALUATION: true,
-        STEP_BY_STEP_EXPLANATIONS: true,
-        BASIC_ANALYTICS: true,
-        DEEP_AI_STUDY_PLAN: true,
-        SECURE_PROCTORING: true,
-        UNLIMITED_TARGETED_EXAMS: false,
-        PREDICTIVE_PASS_SCORE: true,
-        EXTERNAL_AI_PROMPT_HELP: true
-      },
-      isActive: true,
-      updatedAt: now
-    },
-    {
-      tier: "APEX",
-      name: "Apex",
-      positioning: "The Luxury Tier",
-      monthlyPricePence: 2999,
-      examLimitMonthly: null,
-      aiInsightLimitMonthly: null,
-      dailySubjectLimit: null,
-      questionsPerExam: 80,
-      durationMinutes: 60,
-      allowAllSubjectsDaily: true,
-      allowRepeatSubjectSameDay: true,
-      customExamEnabled: true,
-      customExamMaxQuestions: 80,
-      customExamMaxMinutes: 100,
-      llmCustomExamsPerDay: 1,
-      shareExamEnabled: true,
-      features: {
-        STANDARD_EXAMS: true,
-        AI_SHORT_ANSWER_EVALUATION: true,
-        STEP_BY_STEP_EXPLANATIONS: true,
-        BASIC_ANALYTICS: true,
-        DEEP_AI_STUDY_PLAN: true,
-        SECURE_PROCTORING: true,
-        UNLIMITED_TARGETED_EXAMS: true,
-        PREDICTIVE_PASS_SCORE: true,
-        EXTERNAL_AI_PROMPT_HELP: true
-      },
-      isActive: true,
-      updatedAt: now
-    }
-  ];
-}
-
-function defaultPublicPages(): PublicPage[] {
-  const now = new Date().toISOString();
-  return [
-    {
-      id: "page_privacy",
-      slug: "privacy",
-      title: "Privacy Statement",
-      body: "GrammarForge protects learner data, minimises AI prompt data, and supports UK GDPR-aligned operating practices.",
-      status: "PUBLISHED",
-      updatedAt: now
-    },
-    {
-      id: "page_terms",
-      slug: "terms",
-      title: "Terms and Conditions",
-      body: "Use of this platform requires responsible supervision, original study use, and acceptance of subscription terms.",
-      status: "DRAFT",
-      updatedAt: now
-    },
-    {
-      id: "page_about",
-      slug: "about",
-      title: "About GrammarForge",
-      body: "GrammarForge is an 11+ preparation platform created to help children practise with confidence and parents act on clear insight.",
-      status: "PUBLISHED",
-      updatedAt: now
-    }
-  ];
-}
-
-function defaultQuestionGenerationSchedule(): QuestionGenerationSchedule {
-  return {
-    enabled: false,
-    subject: "MATHS",
-    difficulty: "MEDIUM",
-    questionType: "MULTIPLE_CHOICE",
-    count: 10,
-    microTopic: "Mixed 11+ Practice",
-    provider: "GEMINI",
-    frequency: "DAILY",
-    runAt: "02:00",
-    nextRunAt: nextScheduleRun("DAILY", "02:00"),
-    updatedAt: new Date().toISOString()
-  };
-}
-
-function nextScheduleRun(frequency: "DAILY" | "WEEKLY", runAt: string) {
-  const [hours, minutes] = runAt.split(":").map(Number);
-  const next = new Date();
-  next.setHours(Number.isFinite(hours) ? hours : 2, Number.isFinite(minutes) ? minutes : 0, 0, 0);
-  if (next <= new Date()) next.setDate(next.getDate() + (frequency === "DAILY" ? 1 : 7));
-  return next.toISOString();
-}
 
 function seedStore(): Store {
   const passwordHash = bcrypt.hashSync("Password123!", 10);
@@ -406,192 +212,6 @@ export async function createUser(input: {
   return toSafeUser(user);
 }
 
-export async function adminCreateUser(input: AdminUserInput) {
-  const data = store();
-  const existing = data.users.find((user) => user.email.toLowerCase() === input.email.toLowerCase());
-  if (existing) throw new Error("An account with this email already exists.");
-
-  const user: StoredUser = {
-    id: uid("user"),
-    email: input.email.toLowerCase(),
-    passwordHash: await bcrypt.hash(input.password || "Password123!", 10),
-    firstName: input.firstName,
-    lastName: input.lastName,
-    role: input.role,
-    parentId: input.role === "STUDENT" ? input.parentId ?? parentId : null,
-    subscriptionTier: input.subscriptionTier
-  };
-  data.users.push(user);
-  return toSafeUser(user);
-}
-
-export function adminListUsers() {
-  return store().users.map(toSafeUser);
-}
-
-export function adminUpdateUser(userId: string, input: Partial<AdminUserInput>) {
-  const user = store().users.find((candidate) => candidate.id === userId);
-  if (!user) throw new Error("User not found.");
-  if (input.email) user.email = input.email.toLowerCase();
-  if (input.firstName) user.firstName = input.firstName;
-  if (input.lastName) user.lastName = input.lastName;
-  if (input.role) user.role = input.role;
-  if (input.subscriptionTier) user.subscriptionTier = input.subscriptionTier;
-  if ("parentId" in input) user.parentId = input.parentId;
-  return toSafeUser(user);
-}
-
-export function adminDeleteUser(userId: string) {
-  if (userId === adminId) throw new Error("The primary superadmin demo account cannot be deleted.");
-  const data = store();
-  const before = data.users.length;
-  data.users = data.users.filter((user) => user.id !== userId);
-  data.exams = data.exams.filter((exam) => exam.studentId !== userId);
-  if (data.users.length === before) throw new Error("User not found.");
-  return { ok: true };
-}
-
-export function getPlatformConfig() {
-  const data = store();
-  data.platformConfig = {
-    ...data.platformConfig,
-    llmQuota: llmQuotaSnapshot()
-  };
-  return data.platformConfig;
-}
-
-export function updatePlatformConfig(input: Partial<PlatformConfig>) {
-  const data = store();
-  data.platformConfig = {
-    ...data.platformConfig,
-    ...input,
-    maskedGeminiKey: input.maskedGeminiKey ?? data.platformConfig.maskedGeminiKey,
-    maskedGroqKey: input.maskedGroqKey ?? data.platformConfig.maskedGroqKey,
-    maskedStripeKey: input.maskedStripeKey ?? data.platformConfig.maskedStripeKey,
-    llmQuota: llmQuotaSnapshot(),
-    updatedAt: new Date().toISOString()
-  };
-  return data.platformConfig;
-}
-
-export function listPlans() {
-  return store().plans;
-}
-
-export function planHasFeature(tier: Tier, feature: keyof SubscriptionPlanConfig["features"]) {
-  const plan = store().plans.find((candidate) => candidate.tier === tier);
-  return Boolean(plan?.isActive && plan.features[feature]);
-}
-
-export function updatePlan(tier: Tier, input: Partial<SubscriptionPlanConfig>) {
-  const plan = store().plans.find((candidate) => candidate.tier === tier);
-  if (!plan) throw new Error("Plan not found.");
-  Object.assign(plan, input, {
-    features: input.features ? { ...plan.features, ...input.features } : plan.features,
-    updatedAt: new Date().toISOString()
-  });
-  return plan;
-}
-
-export function getPlanForTier(tier: Tier) {
-  const plan = store().plans.find((candidate) => candidate.tier === tier);
-  if (!plan?.isActive) throw new Error("This subscription plan is not active.");
-  return plan;
-}
-
-function dayKey(value?: string) {
-  return (value ? new Date(value) : new Date()).toISOString().slice(0, 10);
-}
-
-export function validateExamAccess(input: {
-  studentId: string;
-  subject: Subject;
-  tier: Tier;
-  isCustomLlm?: boolean;
-}) {
-  const plan = getPlanForTier(input.tier);
-  const today = dayKey();
-  const todaysExams = store().exams.filter((exam) => exam.studentId === input.studentId && dayKey(exam.startedAt) === today);
-  const todaysStandard = todaysExams.filter((exam) => !exam.id.includes("_custom_"));
-  const todaysCustom = todaysExams.filter((exam) => exam.id.includes("_custom_"));
-
-  if (input.isCustomLlm) {
-    if (!plan.customExamEnabled) throw new Error(`${plan.name} does not include custom LLM exam generation.`);
-    if (todaysCustom.length >= plan.llmCustomExamsPerDay) {
-      throw new Error(`${plan.name} allows ${plan.llmCustomExamsPerDay} custom LLM exam per day.`);
-    }
-    return plan;
-  }
-
-  if (!plan.allowRepeatSubjectSameDay && todaysStandard.some((exam) => exam.subject === input.subject)) {
-    throw new Error(`${plan.name} allows ${input.subject.replaceAll("_", " ")} only once per day.`);
-  }
-
-  if (!plan.allowAllSubjectsDaily && todaysStandard.length >= (plan.dailySubjectLimit ?? 1)) {
-    throw new Error(`${plan.name} allows one subject per day. Please come back tomorrow for the next subject.`);
-  }
-
-  if (plan.allowAllSubjectsDaily && plan.dailySubjectLimit && new Set(todaysStandard.map((exam) => exam.subject)).size >= plan.dailySubjectLimit) {
-    throw new Error(`${plan.name} daily subject allowance has been used.`);
-  }
-
-  return plan;
-}
-
-export function listPublicPages() {
-  return store().publicPages;
-}
-
-export function upsertPublicPage(input: Omit<PublicPage, "id" | "updatedAt"> & { id?: string }) {
-  const data = store();
-  const existing = data.publicPages.find((page) => page.id === input.id || page.slug === input.slug);
-  if (existing) {
-    existing.slug = input.slug;
-    existing.title = input.title;
-    existing.body = input.body;
-    existing.status = input.status;
-    existing.updatedAt = new Date().toISOString();
-    return existing;
-  }
-  const created: PublicPage = {
-    ...input,
-    id: uid("page"),
-    updatedAt: new Date().toISOString()
-  };
-  data.publicPages.push(created);
-  return created;
-}
-
-export function deletePublicPage(pageId: string) {
-  const data = store();
-  const before = data.publicPages.length;
-  data.publicPages = data.publicPages.filter((page) => page.id !== pageId);
-  if (data.publicPages.length === before) throw new Error("Page not found.");
-  return { ok: true };
-}
-
-export function platformAnalytics(): PlatformAnalytics {
-  const data = store();
-  const completed = data.exams.filter((exam) => exam.status === "GRADED");
-  const averageScore = completed.length
-    ? Math.round(completed.reduce((sum, exam) => sum + (exam.score ?? 0), 0) / completed.length)
-    : 0;
-  return {
-    totalUsers: data.users.length,
-    students: data.users.filter((user) => user.role === "STUDENT").length,
-    parents: data.users.filter((user) => user.role === "PARENT").length,
-    admins: data.users.filter((user) => user.role === "ADMIN").length,
-    activeSubscriptions: data.users.filter((user) => user.subscriptionTier !== "FOUNDATION").length,
-    examsStarted: data.exams.length,
-    examsCompleted: completed.length,
-    averageScore,
-    auditEvents: data.auditLogs.length,
-    aiInsightsCached: data.insights.length,
-    questionBankSize: questionBank.length,
-    uptimeStatus: "OPERATIONAL"
-  };
-}
-
 export function questionBankStats(): QuestionBankStats {
   const bySubject = {
     MATHS: 0,
@@ -627,7 +247,7 @@ export function questionGenerationAdminState() {
   };
 }
 
-function llmQuotaSnapshot(now = new Date()) {
+export function llmQuotaSnapshot(now = new Date(), configInput?: PlatformConfig) {
   const reset = new Date(now);
   reset.setUTCHours(24, 0, 0, 0);
   const today = now.toISOString().slice(0, 10);
@@ -640,7 +260,7 @@ function llmQuotaSnapshot(now = new Date()) {
     GROQ: Boolean(process.env.GROQ_API_KEY),
     INTERNAL: true
   };
-  const config = store().platformConfig;
+  const config = configInput ?? store().platformConfig;
   const adminDailyLimit = Math.max(config.aiDailyLimitPremium, config.aiDailyLimitPro, config.aiDailyLimitFree);
   const rows: Array<{ provider: LlmProvider; enabled: boolean; dailyLimit: number; note: string }> = [
     {
@@ -738,14 +358,14 @@ export async function runQuestionGeneration(input: QuestionGenerationInput) {
 
   try {
     const generated = await generateAdminQuestions(input, generationPlan);
-    questionBank.push(...generated);
+    questionBank.push(...generated.questions);
     job.status = "COMPLETED";
-    job.generatedCount = generated.length;
+    job.generatedCount = generated.questions.length;
     job.completedAt = new Date().toISOString();
     addAuditLog("admin_question_generation", "QUESTION_FLAGGED", {
       jobId: job.id,
       subject: input.subject,
-      count: generated.length,
+      count: generated.questions.length,
       provider: input.provider,
       mode: input.mode
     });
@@ -768,14 +388,16 @@ export function previewQuestionGeneration(input: QuestionGenerationInput) {
 
 export async function generateQuestionCandidates(input: QuestionGenerationInput & { promptOverride?: string }) {
   const generationPlan = buildQuestionGenerationPlan(input);
-  const generated = input.promptOverride?.trim()
+  const result = input.promptOverride?.trim()
     ? await generateAdminQuestionsWithPrompt(input, generationPlan, input.promptOverride.trim())
     : await generateAdminQuestions(input, generationPlan);
 
   return {
     generationPlan,
     prompt: input.promptOverride?.trim() || buildLlmQuestionPrompt(input, generationPlan),
-    questions: generated.map((question) => ({ ...question, id: uid("q_candidate") })),
+    questions: result.questions.map((question) => ({ ...question, id: uid("q_candidate") })),
+    generationMeta: result.meta,
+    llmQuota: llmQuotaSnapshot(),
     stats: questionBankStats()
   };
 }
@@ -860,16 +482,36 @@ function buildQuestionGenerationPlan(input: QuestionGenerationInput): QuestionGe
     .filter((item) => item.count > 0);
 }
 
-async function generateAdminQuestions(input: QuestionGenerationInput, generationPlan: QuestionGenerationPlanItem[]): Promise<Question[]> {
-  const llmQuestions = input.provider === "INTERNAL" ? null : await generateQuestionsWithConfiguredLlm(input, generationPlan);
-  if (llmQuestions?.length) {
-    const trimmed = llmQuestions.slice(0, input.count);
-    if (trimmed.length >= input.count) return trimmed;
+async function generateAdminQuestions(input: QuestionGenerationInput, generationPlan: QuestionGenerationPlanItem[]): Promise<GeneratedQuestionResult> {
+  const llmResult = input.provider === "INTERNAL" ? null : await generateQuestionsWithConfiguredLlm(input, generationPlan);
+  if (llmResult?.questions.length) {
+    const trimmed = llmResult.questions.slice(0, input.count);
+    if (trimmed.length >= input.count) {
+      return {
+        questions: trimmed,
+        meta: { ...llmResult.meta, requestedCount: input.count, llmReturnedCount: llmResult.questions.length, fallbackCount: 0 }
+      };
+    }
     const fallback = buildFallbackAdminQuestions(input, generationPlan, input.count, trimmed.length);
-    return [...trimmed, ...fallback.slice(0, input.count - trimmed.length)];
+    const fallbackTopUp = fallback.slice(0, input.count - trimmed.length);
+    return {
+      questions: [...trimmed, ...fallbackTopUp],
+      meta: { ...llmResult.meta, requestedCount: input.count, llmReturnedCount: llmResult.questions.length, fallbackCount: fallbackTopUp.length }
+    };
   }
 
-  return buildFallbackAdminQuestions(input, generationPlan, input.count, 0);
+  const fallback = buildFallbackAdminQuestions(input, generationPlan, input.count, 0);
+  return {
+    questions: fallback,
+    meta: {
+      requestedProvider: input.provider,
+      actualProvider: "INTERNAL",
+      source: "INTERNAL_FALLBACK",
+      requestedCount: input.count,
+      llmReturnedCount: 0,
+      fallbackCount: fallback.length
+    }
+  };
 }
 
 function buildFallbackAdminQuestions(
@@ -923,15 +565,24 @@ async function generateAdminQuestionsWithPrompt(
   input: QuestionGenerationInput,
   generationPlan: QuestionGenerationPlanItem[],
   prompt: string
-): Promise<Question[]> {
-  const text = input.provider === "INTERNAL" ? null : await callQuestionGenerationLlm(input.provider, prompt);
-  if (text) {
-    const parsed = parseGeneratedQuestions(input, text);
+): Promise<GeneratedQuestionResult> {
+  const response = input.provider === "INTERNAL" ? null : await callQuestionGenerationLlm(input.provider, prompt);
+  if (response?.text) {
+    const parsed = parseGeneratedQuestions(input, response.text);
     if (parsed?.length) {
       const trimmed = parsed.slice(0, input.count);
-      if (trimmed.length >= input.count) return trimmed;
+      if (trimmed.length >= input.count) {
+        return {
+          questions: trimmed,
+          meta: { ...response.meta, requestedCount: input.count, llmReturnedCount: parsed.length, fallbackCount: 0 }
+        };
+      }
       const fallback = buildFallbackAdminQuestions(input, generationPlan, input.count, trimmed.length);
-      return [...trimmed, ...fallback.slice(0, input.count - trimmed.length)];
+      const fallbackTopUp = fallback.slice(0, input.count - trimmed.length);
+      return {
+        questions: [...trimmed, ...fallbackTopUp],
+        meta: { ...response.meta, requestedCount: input.count, llmReturnedCount: parsed.length, fallbackCount: fallbackTopUp.length }
+      };
     }
   }
   return generateAdminQuestions({ ...input, provider: "INTERNAL" }, generationPlan);
@@ -964,9 +615,11 @@ function buildLlmQuestionPrompt(input: QuestionGenerationInput, generationPlan: 
 
 async function generateQuestionsWithConfiguredLlm(input: QuestionGenerationInput, generationPlan: QuestionGenerationPlanItem[]) {
   const prompt = buildLlmQuestionPrompt(input, generationPlan);
-  const text = await callQuestionGenerationLlm(input.provider, prompt);
-  if (!text) return null;
-  return parseGeneratedQuestions(input, text);
+  const response = await callQuestionGenerationLlm(input.provider, prompt);
+  if (!response?.text) return null;
+  const questions = parseGeneratedQuestions(input, response.text);
+  if (!questions) return null;
+  return { questions, meta: response.meta };
 }
 
 function parseGeneratedQuestions(input: QuestionGenerationInput, text: string) {
@@ -1022,13 +675,13 @@ function llmProviderOrder(preferred: LlmProvider) {
 
 async function callQuestionGenerationLlm(provider: LlmProvider, prompt: string) {
   for (const candidate of llmProviderOrder(provider)) {
-    const text = await callSingleQuestionGenerationProvider(candidate, prompt);
-    if (text) return text;
+    const result = await callSingleQuestionGenerationProvider(candidate, prompt, provider);
+    if (result?.text) return result;
   }
   return null;
 }
 
-async function callSingleQuestionGenerationProvider(provider: LlmProvider, prompt: string) {
+async function callSingleQuestionGenerationProvider(provider: LlmProvider, prompt: string, requestedProvider: LlmProvider) {
   if (provider === "GEMINI" && process.env.GEMINI_API_KEY) {
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
@@ -1043,7 +696,22 @@ async function callSingleQuestionGenerationProvider(provider: LlmProvider, promp
     );
     if (response.ok) {
       const json = await response.json();
-      return json.candidates?.[0]?.content?.parts?.[0]?.text as string | undefined;
+      return {
+        text: json.candidates?.[0]?.content?.parts?.[0]?.text as string | undefined,
+        meta: {
+          requestedProvider,
+          actualProvider: "GEMINI" as const,
+          source: "LLM" as const,
+          requestedCount: 0,
+          llmReturnedCount: 0,
+          fallbackCount: 0,
+          gemini: {
+            promptTokenCount: json.usageMetadata?.promptTokenCount,
+            candidatesTokenCount: json.usageMetadata?.candidatesTokenCount,
+            totalTokenCount: json.usageMetadata?.totalTokenCount
+          }
+        }
+      };
     }
   }
 
@@ -1063,7 +731,25 @@ async function callSingleQuestionGenerationProvider(provider: LlmProvider, promp
     });
     if (response.ok) {
       const json = await response.json();
-      return json.choices?.[0]?.message?.content as string | undefined;
+      return {
+        text: json.choices?.[0]?.message?.content as string | undefined,
+        meta: {
+          requestedProvider,
+          actualProvider: "GROQ" as const,
+          source: "LLM" as const,
+          requestedCount: 0,
+          llmReturnedCount: 0,
+          fallbackCount: 0,
+          groq: {
+            remainingRequests: response.headers.get("x-ratelimit-remaining-requests"),
+            remainingTokens: response.headers.get("x-ratelimit-remaining-tokens"),
+            limitRequests: response.headers.get("x-ratelimit-limit-requests"),
+            limitTokens: response.headers.get("x-ratelimit-limit-tokens"),
+            resetRequests: response.headers.get("x-ratelimit-reset-requests"),
+            resetTokens: response.headers.get("x-ratelimit-reset-tokens")
+          }
+        }
+      };
     }
   }
 
@@ -1223,7 +909,8 @@ async function generateCustomQuestions(input: {
       provider,
       mode: "ON_DEMAND"
     };
-    generated.push(...(await generateAdminQuestions(generationInput, compressGenerationPlan(planSlice.length ? planSlice : buildQuestionGenerationPlan(generationInput)))));
+    const result = await generateAdminQuestions(generationInput, compressGenerationPlan(planSlice.length ? planSlice : buildQuestionGenerationPlan(generationInput)));
+    generated.push(...result.questions);
   }
 
   questionBank.push(...generated);
