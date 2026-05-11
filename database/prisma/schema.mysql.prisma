@@ -1,0 +1,492 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url       = env("DATABASE_URL")
+}
+
+enum UserRole {
+  STUDENT
+  PARENT
+  ADMIN
+}
+
+enum SubscriptionTier {
+  FOUNDATION
+  ALPHA
+  VELOCITY
+  APEX
+}
+
+enum SubscriptionStatus {
+  INCOMPLETE
+  INCOMPLETE_EXPIRED
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  UNPAID
+  PAUSED
+}
+
+enum SubjectType {
+  MATHS
+  ENGLISH
+  VERBAL_REASONING
+  NON_VERBAL_REASONING
+}
+
+enum QuestionType {
+  MULTIPLE_CHOICE
+  SHORT_ANSWER
+}
+
+enum DifficultyLevel {
+  EASY
+  MEDIUM
+  HARD
+  ADVANCED
+}
+
+enum ExamStatus {
+  DRAFT
+  IN_PROGRESS
+  PAUSED
+  SUBMITTED
+  GRADED
+  ABANDONED
+}
+
+enum AuditEventType {
+  EXAM_STARTED
+  EXAM_PAUSED
+  EXAM_RESUMED
+  EXAM_SUBMITTED
+  ANSWER_SAVED
+  QUESTION_FLAGGED
+  QUESTION_UNFLAGGED
+  WINDOW_BLUR
+  WINDOW_FOCUS
+  FULLSCREEN_EXIT
+  FULLSCREEN_ENTER
+  PRINT_SCREEN_ATTEMPT
+  CAMERA_PERMISSION_DENIED
+  CAMERA_SUSPICION_FLAG
+  TIMER_SYNC
+}
+
+enum InsightType {
+  PARENT_WEEKLY_REPORT
+  STUDENT_COACHING_TIP
+  STUDY_PLAN
+  PREDICTIVE_SCORE
+}
+
+enum AiProvider {
+  GEMINI
+  GROQ
+  INTERNAL
+}
+
+enum PlanFeatureKey {
+  STANDARD_EXAMS
+  AI_SHORT_ANSWER_EVALUATION
+  STEP_BY_STEP_EXPLANATIONS
+  BASIC_ANALYTICS
+  DEEP_AI_STUDY_PLAN
+  SECURE_PROCTORING
+  UNLIMITED_TARGETED_EXAMS
+  PREDICTIVE_PASS_SCORE
+  EXTERNAL_AI_PROMPT_HELP
+}
+
+enum PublicPageStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum QuestionGenerationStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum QuestionGenerationMode {
+  ON_DEMAND
+  SCHEDULED
+}
+
+enum QuestionGenerationFrequency {
+  DAILY
+  WEEKLY
+}
+
+model User {
+  id                 String           @id @default(uuid()) @db.VarChar(36)
+  role               UserRole
+  subscriptionTier   SubscriptionTier @default(FOUNDATION)
+  stripeCustomerId   String?          @unique @map("stripe_customer_id")
+  email              String           @unique @db.VarChar(320)
+  passwordHash       String?          @map("password_hash")
+  firstName          String           @map("first_name") @db.VarChar(80)
+  lastName           String           @map("last_name") @db.VarChar(80)
+  parentId           String?          @map("parent_id") @db.VarChar(36)
+  emailVerifiedAt    DateTime?        @map("email_verified_at") @db.DateTime(3)
+  lastLoginAt        DateTime?        @map("last_login_at") @db.DateTime(3)
+  createdAt          DateTime         @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt          DateTime         @updatedAt @map("updated_at") @db.DateTime(3)
+
+  parent             User?            @relation("ParentStudents", fields: [parentId], references: [id], onDelete: SetNull)
+  students           User[]           @relation("ParentStudents")
+  subscriptions      Subscription[]
+  exams              Exam[]           @relation("StudentExams")
+  aiInsights         AiInsight[]      @relation("StudentInsights")
+  usageEvents        UsageEvent[]
+  emailVerificationTokens EmailVerificationToken[]
+
+  @@index([role])
+  @@index([parentId])
+  @@map("users")
+}
+
+model EmailVerificationToken {
+  id          String   @id @default(uuid()) @db.VarChar(36)
+  userId      String   @map("user_id") @db.VarChar(36)
+  tokenHash   String   @unique @map("token_hash") @db.VarChar(128)
+  email       String   @db.VarChar(255)
+  expiresAt   DateTime @map("expires_at") @db.DateTime(3)
+  consumedAt  DateTime? @map("consumed_at") @db.DateTime(3)
+  createdAt   DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@index([email, expiresAt])
+  @@map("email_verification_tokens")
+}
+
+model Subscription {
+  id                   String             @id @default(uuid()) @db.VarChar(36)
+  userId               String             @map("user_id") @db.VarChar(36)
+  tier                 SubscriptionTier
+  status               SubscriptionStatus @default(INCOMPLETE)
+  stripeSubscriptionId String?            @unique @map("stripe_subscription_id")
+  stripePriceId        String?            @map("stripe_price_id")
+  currentPeriodStart   DateTime?          @map("current_period_start") @db.DateTime(3)
+  currentPeriodEnd     DateTime?          @map("current_period_end") @db.DateTime(3)
+  cancelAtPeriodEnd    Boolean            @default(false) @map("cancel_at_period_end")
+  createdAt            DateTime           @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt            DateTime           @updatedAt @map("updated_at") @db.DateTime(3)
+
+  user                 User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([tier])
+  @@map("subscriptions")
+}
+
+model QuestionMaster {
+  id               String           @id @default(uuid()) @map("question_id") @db.VarChar(36)
+  subjectType      SubjectType      @map("subject_type")
+  topic            String           @db.VarChar(120)
+  syllabusTopicSlug String          @map("syllabus_topic_slug") @db.VarChar(120)
+  questionType     QuestionType     @map("question_type")
+  title            String?          @db.VarChar(160)
+  instruction      String?          @db.Text
+  stimulusData     Json?            @map("stimulus_data")
+  passageTitle     String?          @map("passage_title") @db.VarChar(180)
+  passageText      String?          @map("passage_text") @db.Text
+  questionData     Json             @map("question_data_blob")
+  options          Json?            @map("options_blob")
+  option1          Json?            @map("option1_blob")
+  option2          Json?            @map("option2_blob")
+  option3          Json?            @map("option3_blob")
+  option4          Json?            @map("option4_blob")
+  answer           String           @db.Text
+  explanation      String?          @db.Text
+  difficultyLevel  DifficultyLevel  @map("difficulty_level")
+  microTopic       String           @map("micro_topic") @db.VarChar(120)
+  skillTags        Json?            @map("skill_tags")
+  examBoardTags    Json?            @map("exam_board_tags")
+  estimatedSeconds Int?             @map("estimated_seconds")
+  marksAvailable   Decimal          @default(1) @map("marks_available") @db.Decimal(5, 2)
+  scoringWeight     Decimal          @default(1) @map("scoring_weight") @db.Decimal(5, 2)
+  curriculumTag    String?          @map("curriculum_tag") @db.VarChar(120)
+  source           String           @default("question_master") @db.VarChar(80)
+  isActive         Boolean          @default(true) @map("is_active")
+  createdAt        DateTime         @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt        DateTime         @updatedAt @map("updated_at") @db.DateTime(3)
+
+  examQuestions    ExamQuestion[]
+  studentAnswers   StudentAnswer[]
+
+  @@index([subjectType, difficultyLevel, isActive])
+  @@index([subjectType, topic])
+  @@index([subjectType, microTopic])
+  @@index([syllabusTopicSlug])
+  @@index([questionType])
+  @@map("question_master")
+}
+
+model SyllabusTopic {
+  id                 String      @id @default(uuid()) @db.VarChar(36)
+  subjectType        SubjectType @map("subject_type")
+  slug               String      @db.VarChar(120)
+  name               String      @db.VarChar(160)
+  subTopics          Json        @map("sub_topics")
+  examBoardTags      Json?       @map("exam_board_tags")
+  displayOrder       Int         @default(0) @map("display_order")
+  isActive           Boolean     @default(true) @map("is_active")
+  createdAt          DateTime    @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt          DateTime    @updatedAt @map("updated_at") @db.DateTime(3)
+
+  @@unique([subjectType, slug])
+  @@index([subjectType, displayOrder])
+  @@map("syllabus_topics")
+}
+
+model Exam {
+  id                   String          @id @default(uuid()) @map("exam_id") @db.VarChar(36)
+  studentId            String          @map("student_id") @db.VarChar(36)
+  subject              SubjectType
+  patternLabel         String?         @map("pattern_label") @db.VarChar(160)
+  isProctored          Boolean         @default(false) @map("is_proctored")
+  status               ExamStatus      @default(DRAFT)
+  score                Decimal?        @db.Decimal(5, 2)
+  rawScore             Decimal?        @map("raw_score") @db.Decimal(6, 2)
+  totalMarks           Decimal?        @map("total_marks") @db.Decimal(6, 2)
+  passBenchmarkPercent Decimal?        @map("pass_benchmark_percent") @db.Decimal(5, 2)
+  totalQuestions       Int             @default(0) @map("total_questions")
+  correctAnswers       Int             @default(0) @map("correct_answers")
+  durationSeconds      Int             @default(3000) @map("duration_seconds")
+  serverStartedAt      DateTime?       @map("server_started_at") @db.DateTime(3)
+  serverExpiresAt      DateTime?       @map("server_expires_at") @db.DateTime(3)
+  startedAt            DateTime?       @map("started_at") @db.DateTime(3)
+  completedAt          DateTime?       @map("completed_at") @db.DateTime(3)
+  createdAt            DateTime        @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt            DateTime        @updatedAt @map("updated_at") @db.DateTime(3)
+
+  student              User            @relation("StudentExams", fields: [studentId], references: [id], onDelete: Cascade)
+  examQuestions        ExamQuestion[]
+  studentAnswers       StudentAnswer[]
+  auditLogs            ExamAuditLog[]
+
+  @@index([studentId, status])
+  @@index([subject, status])
+  @@index([serverExpiresAt])
+  @@map("exams")
+}
+
+model ExamQuestion {
+  examId         String         @map("exam_id") @db.VarChar(36)
+  questionId     String         @map("question_id") @db.VarChar(36)
+  sequenceOrder  Int            @map("sequence_order")
+  points         Decimal        @default(1) @db.Decimal(5, 2)
+  sectionName    String?        @map("section_name") @db.VarChar(160)
+
+  exam           Exam           @relation(fields: [examId], references: [id], onDelete: Cascade)
+  question       QuestionMaster @relation(fields: [questionId], references: [id], onDelete: Restrict)
+
+  @@id([examId, questionId])
+  @@unique([examId, sequenceOrder])
+  @@index([questionId])
+  @@map("exam_questions")
+}
+
+model StudentAnswer {
+  id                  String          @id @default(uuid()) @map("answer_id") @db.VarChar(36)
+  examId              String          @map("exam_id") @db.VarChar(36)
+  questionId          String          @map("question_id") @db.VarChar(36)
+  studentResponse     String?         @map("student_response") @db.Text
+  isMarkedForReview   Boolean         @default(false) @map("is_marked_for_review")
+  isCorrect           Boolean?        @map("is_correct")
+  awardedPoints       Decimal?        @map("awarded_points") @db.Decimal(5, 2)
+  aiFeedback          String?         @map("ai_feedback") @db.Text
+  submittedAt         DateTime?       @map("submitted_at") @db.DateTime(3)
+  createdAt           DateTime        @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt           DateTime        @updatedAt @map("updated_at") @db.DateTime(3)
+
+  exam                Exam            @relation(fields: [examId], references: [id], onDelete: Cascade)
+  question            QuestionMaster  @relation(fields: [questionId], references: [id], onDelete: Restrict)
+
+  @@unique([examId, questionId])
+  @@index([examId, isMarkedForReview])
+  @@index([questionId, isCorrect])
+  @@map("student_answers")
+}
+
+model ExamAuditLog {
+  id              String         @id @default(uuid()) @map("audit_id") @db.VarChar(36)
+  examId          String         @map("exam_id") @db.VarChar(36)
+  eventType       AuditEventType @map("event_type")
+  eventTimestamp  DateTime       @default(now()) @map("event_timestamp") @db.DateTime(3)
+  details         Json?
+  ipAddress       String?        @map("ip_address") @db.VarChar(45)
+  userAgent       String?        @map("user_agent") @db.Text
+
+  exam            Exam           @relation(fields: [examId], references: [id], onDelete: Cascade)
+
+  @@index([examId, eventTimestamp])
+  @@index([eventType, eventTimestamp])
+  @@map("exam_audit_logs")
+}
+
+model AiInsight {
+  id             String      @id @default(uuid()) @map("insight_id") @db.VarChar(36)
+  userId         String      @map("user_id") @db.VarChar(36)
+  insightType    InsightType @map("insight_type")
+  insightContent Json        @map("insight_content")
+  provider       AiProvider  @default(INTERNAL)
+  cacheKey       String?     @unique @map("cache_key") @db.VarChar(180)
+  generatedAt    DateTime    @default(now()) @map("generated_at") @db.DateTime(3)
+  expiresAt      DateTime    @map("expires_at") @db.DateTime(3)
+
+  user           User        @relation("StudentInsights", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, insightType, expiresAt])
+  @@index([expiresAt])
+  @@map("ai_insights")
+}
+
+model UsageEvent {
+  id           String    @id @default(uuid()) @db.VarChar(36)
+  userId       String    @map("user_id") @db.VarChar(36)
+  featureKey   String    @map("feature_key") @db.VarChar(80)
+  quantity     Int       @default(1)
+  periodStart  DateTime  @map("period_start") @db.DateTime(3)
+  periodEnd    DateTime  @map("period_end") @db.DateTime(3)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, featureKey, periodStart, periodEnd])
+  @@map("usage_events")
+}
+
+model PlatformConfig {
+  id                   String     @id @default(uuid()) @db.VarChar(36)
+  activeLlmProvider    AiProvider @default(GEMINI) @map("active_llm_provider")
+  geminiEnabled        Boolean    @default(true) @map("gemini_enabled")
+  groqEnabled          Boolean    @default(true) @map("groq_enabled")
+  redisCacheEnabled    Boolean    @default(true) @map("redis_cache_enabled")
+  aiDailyLimitFree     Int        @default(3) @map("ai_daily_limit_free")
+  aiDailyLimitPro      Int        @default(25) @map("ai_daily_limit_pro")
+  aiDailyLimitPremium  Int        @default(100) @map("ai_daily_limit_premium")
+  geminiKeySecretName  String?    @map("gemini_key_secret_name") @db.VarChar(160)
+  groqKeySecretName    String?    @map("groq_key_secret_name") @db.VarChar(160)
+  stripeKeySecretName  String?    @map("stripe_key_secret_name") @db.VarChar(160)
+  updatedByUserId      String?    @map("updated_by_user_id") @db.VarChar(36)
+  createdAt            DateTime   @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt            DateTime   @updatedAt @map("updated_at") @db.DateTime(3)
+
+  @@map("platform_configs")
+}
+
+model SubscriptionPlanConfig {
+  tier                  SubscriptionTier @id
+  name                  String           @db.VarChar(80)
+  positioning           String           @default("") @db.VarChar(160)
+  monthlyPricePence     Int              @default(0) @map("monthly_price_pence")
+  examLimitMonthly      Int?             @map("exam_limit_monthly")
+  aiInsightLimitMonthly Int?             @map("ai_insight_limit_monthly")
+  dailySubjectLimit     Int?             @map("daily_subject_limit")
+  questionsPerExam      Int              @default(10) @map("questions_per_exam")
+  durationMinutes       Int              @default(10) @map("duration_minutes")
+  allowAllSubjectsDaily Boolean          @default(false) @map("allow_all_subjects_daily")
+  allowRepeatSubjectSameDay Boolean      @default(false) @map("allow_repeat_subject_same_day")
+  customExamEnabled     Boolean          @default(false) @map("custom_exam_enabled")
+  customExamMaxQuestions Int             @default(0) @map("custom_exam_max_questions")
+  customExamMaxMinutes  Int              @default(0) @map("custom_exam_max_minutes")
+  llmCustomExamsPerDay  Int              @default(0) @map("llm_custom_exams_per_day")
+  shareExamEnabled      Boolean          @default(false) @map("share_exam_enabled")
+  isActive              Boolean          @default(true) @map("is_active")
+  createdAt             DateTime         @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt             DateTime         @updatedAt @map("updated_at") @db.DateTime(3)
+
+  features              SubscriptionPlanFeature[]
+
+  @@map("subscription_plan_configs")
+}
+
+model SubscriptionPlanFeature {
+  id        String                 @id @default(uuid()) @db.VarChar(36)
+  tier      SubscriptionTier
+  feature   PlanFeatureKey
+  enabled   Boolean                @default(false)
+  plan      SubscriptionPlanConfig @relation(fields: [tier], references: [tier], onDelete: Cascade)
+
+  @@unique([tier, feature])
+  @@index([feature, enabled])
+  @@map("subscription_plan_features")
+}
+
+model PublicPage {
+  id          String           @id @default(uuid()) @db.VarChar(36)
+  slug        String           @unique @db.VarChar(120)
+  title       String           @db.VarChar(180)
+  body        String           @db.Text
+  status      PublicPageStatus @default(DRAFT)
+  publishedAt DateTime?        @map("published_at") @db.DateTime(3)
+  createdAt   DateTime         @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt   DateTime         @updatedAt @map("updated_at") @db.DateTime(3)
+
+  @@index([status, updatedAt])
+  @@map("public_pages")
+}
+
+model AdminAuditLog {
+  id             String   @id @default(uuid()) @db.VarChar(36)
+  adminUserId    String   @map("admin_user_id") @db.VarChar(36)
+  action         String   @db.VarChar(120)
+  targetType     String   @map("target_type") @db.VarChar(80)
+  targetId       String?  @map("target_id") @db.VarChar(160)
+  details        Json?
+  eventTimestamp DateTime @default(now()) @map("event_timestamp") @db.DateTime(3)
+
+  @@index([adminUserId, eventTimestamp])
+  @@index([targetType, targetId])
+  @@map("admin_audit_logs")
+}
+
+model QuestionGenerationJob {
+  id             String                   @id @default(uuid()) @db.VarChar(36)
+  subject        SubjectType
+  difficulty     DifficultyLevel
+  questionType   QuestionType             @map("question_type")
+  count          Int
+  microTopic     String                   @map("micro_topic") @db.VarChar(120)
+  provider       AiProvider
+  status         QuestionGenerationStatus @default(QUEUED)
+  mode           QuestionGenerationMode
+  generatedCount Int                      @default(0) @map("generated_count")
+  error          String?                  @db.Text
+  createdAt      DateTime                 @default(now()) @map("created_at") @db.DateTime(3)
+  completedAt    DateTime?                @map("completed_at") @db.DateTime(3)
+
+  @@index([status, createdAt])
+  @@index([subject, difficulty])
+  @@map("question_generation_jobs")
+}
+
+model QuestionGenerationSchedule {
+  id           String                      @id @default(uuid()) @db.VarChar(36)
+  enabled      Boolean                     @default(false)
+  subject      SubjectType
+  difficulty   DifficultyLevel
+  questionType QuestionType                @map("question_type")
+  count        Int                         @default(10)
+  microTopic   String                      @map("micro_topic") @db.VarChar(120)
+  provider     AiProvider                  @default(GEMINI)
+  frequency    QuestionGenerationFrequency @default(DAILY)
+  runAt        String                      @default("02:00") @map("run_at") @db.VarChar(5)
+  nextRunAt    DateTime?                   @map("next_run_at") @db.DateTime(3)
+  updatedAt    DateTime                    @updatedAt @map("updated_at") @db.DateTime(3)
+
+  @@index([enabled, nextRunAt])
+  @@map("question_generation_schedules")
+}
+
