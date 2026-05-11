@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/backend/auth/session";
-import { getExam, listStudentsFor } from "@/backend/exams/demo-store";
+import { listStudentsFor } from "@/backend/auth/users";
+import { getExam } from "@/backend/exams/demo-store";
 
 export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
@@ -8,7 +9,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   const exam = getExam(id);
   if (!exam) return NextResponse.json({ error: "Exam not found" }, { status: 404 });
 
-  const studentIds = user.role === "PARENT" ? listStudentsFor(user.id).map((student) => student.id) : [user.id];
+  const studentIds = user.role === "PARENT" ? (await listStudentsFor(user.id)).map((student) => student.id) : [user.id];
   if (user.role !== "ADMIN" && !studentIds.includes(exam.studentId)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

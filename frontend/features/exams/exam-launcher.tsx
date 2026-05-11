@@ -4,9 +4,17 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { BookOpenCheck, Play, ShieldCheck } from "lucide-react";
 import { Button } from "@/frontend/shared/ui/button";
-import type { Subject } from "@/backend/shared/types";
+import type { Subject, SubscriptionPlanConfig } from "@/backend/shared/types";
 
-export function ExamLauncher({ proctorAllowed = true }: { proctorAllowed?: boolean }) {
+export function ExamLauncher({
+  proctorAllowed = true,
+  customAllowed = false,
+  plan
+}: {
+  proctorAllowed?: boolean;
+  customAllowed?: boolean;
+  plan?: SubscriptionPlanConfig;
+}) {
   const router = useRouter();
   const [subject, setSubject] = useState<Subject>("MATHS");
   const [isProctored, setIsProctored] = useState(false);
@@ -30,7 +38,7 @@ export function ExamLauncher({ proctorAllowed = true }: { proctorAllowed?: boole
       body: JSON.stringify({
         subject,
         isProctored,
-        mode: customMode ? "CUSTOM_LLM" : "STANDARD",
+        mode: customAllowed && customMode ? "CUSTOM_LLM" : "STANDARD",
         questionCount,
         durationMinutes,
         difficultyMix: { easy, medium, hard },
@@ -74,15 +82,21 @@ export function ExamLauncher({ proctorAllowed = true }: { proctorAllowed?: boole
           <Play size={18} /> {loading ? "Preparing..." : "Start exam"}
         </Button>
       </div>
-      <label className="mt-3 flex cursor-pointer items-center justify-between gap-3 rounded-md border border-ink/10 bg-white p-3 text-sm font-bold text-ink/72">
-        <span>Apex custom LLM recipe</span>
-        <input className="h-4 w-4 accent-teal" type="checkbox" checked={customMode} onChange={(event) => setCustomMode(event.target.checked)} />
-      </label>
-      {customMode && (
+      {customAllowed ? (
+        <label className="mt-3 flex cursor-pointer items-center justify-between gap-3 rounded-md border border-ink/10 bg-white p-3 text-sm font-bold text-ink/72">
+          <span>{plan?.name ?? "Apex"} custom LLM recipe</span>
+          <input className="h-4 w-4 accent-teal" type="checkbox" checked={customMode} onChange={(event) => setCustomMode(event.target.checked)} />
+        </label>
+      ) : (
+        <div className="mt-3 rounded-md border border-ink/10 bg-white p-3 text-sm font-semibold text-ink/55">
+          Custom LLM recipe is not included in your current plan.
+        </div>
+      )}
+      {customAllowed && customMode && (
         <div className="mt-3 grid gap-2 rounded-md border border-gold/25 bg-gold/10 p-3">
           <div className="grid grid-cols-2 gap-2">
-            <input className="field" type="number" min={1} max={80} value={questionCount} onChange={(event) => setQuestionCount(Number(event.target.value))} />
-            <input className="field" type="number" min={1} max={100} value={durationMinutes} onChange={(event) => setDurationMinutes(Number(event.target.value))} />
+            <input className="field" type="number" min={1} max={plan?.customExamMaxQuestions || 80} value={questionCount} onChange={(event) => setQuestionCount(Number(event.target.value))} />
+            <input className="field" type="number" min={1} max={plan?.customExamMaxMinutes || 100} value={durationMinutes} onChange={(event) => setDurationMinutes(Number(event.target.value))} />
           </div>
           <div className="grid grid-cols-3 gap-2">
             <input className="field" type="number" min={0} max={80} value={easy} onChange={(event) => setEasy(Number(event.target.value))} />
@@ -110,6 +124,7 @@ export function ExamLauncher({ proctorAllowed = true }: { proctorAllowed?: boole
         <span className="flex items-center gap-2"><ShieldCheck size={16} /> Secure proctoring</span>
         <input className="h-4 w-4 accent-teal" type="checkbox" checked={isProctored} disabled={!proctorAllowed} onChange={(event) => setIsProctored(event.target.checked)} />
       </label>
+      {!proctorAllowed && <p className="mt-2 text-xs font-bold text-ink/50">Secure proctoring is disabled for your current plan.</p>}
       {error && <p className="mt-3 rounded-md bg-coral/10 p-3 text-sm font-semibold text-coral">{error}</p>}
     </div>
   );

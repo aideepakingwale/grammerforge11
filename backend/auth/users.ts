@@ -38,6 +38,17 @@ export async function findUser(userId: string) {
   return user ? toSafeUser(user) : null;
 }
 
+export async function listStudentsFor(parentUserId: string) {
+  const students = await prisma.user.findMany({
+    where: {
+      role: "STUDENT",
+      parentId: parentUserId
+    },
+    orderBy: [{ firstName: "asc" }, { lastName: "asc" }]
+  });
+  return students.map(toSafeUser);
+}
+
 export async function verifyUser(email: string, password: string) {
   const user = await prisma.user.findUnique({ where: { email: normaliseEmail(email) } });
   if (!user?.passwordHash) return null;
@@ -94,6 +105,50 @@ export async function registerUser(input: {
   }
 
   return toSafeUser(user);
+}
+
+export async function createLinkedStudent(input: {
+  parentId: string;
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+}) {
+  const parent = await prisma.user.findUnique({ where: { id: input.parentId } });
+  if (!parent || parent.role !== "PARENT") throw new Error("Only a verified parent can create a student profile.");
+  const email = await assertRealRegistrationEmail(input.email);
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing) throw new Error("An account with this email already exists.");
+
+  const { token, tokenHash } = createVerificationToken();
+  const student = await prisma.user.create({
+    data: {
+      email,
+      passwordHash: await bcrypt.hash(input.password, 12),
+      firstName: input.firstName.trim(),
+      lastName: input.lastName.trim(),
+      role: "STUDENT",
+      parentId: input.parentId,
+      subscriptionTier: parent.subscriptionTier
+    }
+  });
+
+  try {
+    await prisma.emailVerificationToken.create({
+      data: {
+        userId: student.id,
+        email,
+        tokenHash,
+        expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24)
+      }
+    });
+    await sendVerificationEmail({ email, firstName: student.firstName, token });
+  } catch (error) {
+    await prisma.user.delete({ where: { id: student.id } }).catch(() => undefined);
+    throw error;
+  }
+
+  return toSafeUser(student);
 }
 
 export async function confirmEmail(token: string) {

@@ -695,6 +695,54 @@ export async function runQuestionGeneration(input: QuestionGenerationInput) {
   return { job, stats: questionBankStats() };
 }
 
+export function previewQuestionGeneration(input: QuestionGenerationInput) {
+  const generationPlan = buildQuestionGenerationPlan(input);
+  return {
+    generationPlan,
+    prompt: buildLlmQuestionPrompt(input, generationPlan)
+  };
+}
+
+export async function generateQuestionCandidates(input: QuestionGenerationInput & { promptOverride?: string }) {
+  const generationPlan = buildQuestionGenerationPlan(input);
+  const generated = input.promptOverride?.trim()
+    ? await generateAdminQuestionsWithPrompt(input, generationPlan, input.promptOverride.trim())
+    : await generateAdminQuestions(input, generationPlan);
+
+  return {
+    generationPlan,
+    prompt: input.promptOverride?.trim() || buildLlmQuestionPrompt(input, generationPlan),
+    questions: generated.map((question) => ({ ...question, id: uid("q_candidate") })),
+    stats: questionBankStats()
+  };
+}
+
+export function importGeneratedQuestions(questions: Question[]) {
+  const imported = questions.map((question) => ({
+    ...enrichQuestionSyllabus(question),
+    id: uid("q_admin_import")
+  }));
+  questionBank.push(...imported);
+  const job: QuestionGenerationJob = {
+    id: uid("qgen_import"),
+    subject: imported[0]?.subjectType ?? "MATHS",
+    difficulty: imported[0]?.difficultyLevel ?? "MEDIUM",
+    questionType: imported[0]?.questionType ?? "MULTIPLE_CHOICE",
+    count: imported.length,
+    microTopic: Array.from(new Set(imported.map((question) => question.microTopic))).join(", ") || "Admin import",
+    topic: imported[0]?.topic,
+    subTopics: Array.from(new Set(imported.map((question) => question.microTopic))),
+    provider: "INTERNAL",
+    status: "COMPLETED",
+    mode: "ON_DEMAND",
+    createdAt: new Date().toISOString(),
+    completedAt: new Date().toISOString(),
+    generatedCount: imported.length
+  };
+  store().questionGenerationJobs.push(job);
+  return { imported, job, stats: questionBankStats() };
+}
+
 export async function runScheduledQuestionGenerationNow() {
   const schedule = store().questionGenerationSchedule;
   if (!schedule.enabled) throw new Error("Scheduled question generation is disabled.");
@@ -782,6 +830,19 @@ async function generateAdminQuestions(input: QuestionGenerationInput, generation
   });
 }
 
+async function generateAdminQuestionsWithPrompt(
+  input: QuestionGenerationInput,
+  generationPlan: QuestionGenerationPlanItem[],
+  prompt: string
+): Promise<Question[]> {
+  const text = input.provider === "INTERNAL" ? null : await callQuestionGenerationLlm(input.provider, prompt);
+  if (text) {
+    const parsed = parseGeneratedQuestions(input, text);
+    if (parsed?.length) return parsed.slice(0, input.count);
+  }
+  return generateAdminQuestions({ ...input, provider: "INTERNAL" }, generationPlan);
+}
+
 function buildLlmQuestionPrompt(input: QuestionGenerationInput, generationPlan: QuestionGenerationPlanItem[]) {
   return [
     "You are generating original UK 11+ practice questions for a production learning platform.",
@@ -805,6 +866,10 @@ async function generateQuestionsWithConfiguredLlm(input: QuestionGenerationInput
   const prompt = buildLlmQuestionPrompt(input, generationPlan);
   const text = await callQuestionGenerationLlm(input.provider, prompt);
   if (!text) return null;
+  return parseGeneratedQuestions(input, text);
+}
+
+function parseGeneratedQuestions(input: QuestionGenerationInput, text: string) {
   try {
     const parsed = JSON.parse(text.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```$/i, "").trim());
     const questions = Array.isArray(parsed.questions) ? parsed.questions : [];

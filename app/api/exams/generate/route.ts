@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/backend/auth/session";
-import { createExam, findUser, listStudentsFor, planHasFeature, validateExamAccess } from "@/backend/exams/demo-store";
+import { findUser, listStudentsFor } from "@/backend/auth/users";
+import { createExam, planHasFeature, validateExamAccess } from "@/backend/exams/demo-store";
 import { examPatternFor } from "@/backend/exams/exam-patterns";
 import type { Tier } from "@/backend/shared/types";
 
@@ -37,12 +38,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Secure proctoring is enabled only for tiers where the admin has switched on that feature." }, { status: 402 });
     }
 
+    const parentStudents = user.role === "PARENT" ? await listStudentsFor(user.id) : [];
     const studentId =
       user.role === "STUDENT"
         ? user.id
-        : input.studentId ?? listStudentsFor(user.id)[0]?.id;
+        : input.studentId ?? parentStudents[0]?.id;
 
     if (!studentId) return NextResponse.json({ error: "No linked student found." }, { status: 400 });
+    if (user.role === "PARENT" && !parentStudents.some((student) => student.id === studentId)) {
+      return NextResponse.json({ error: "This student is not linked to your parent account." }, { status: 403 });
+    }
     const planOwnerTier: Tier = user.role === "STUDENT" ? user.subscriptionTier : user.subscriptionTier;
     const plan = validateExamAccess({
       studentId,
@@ -55,7 +60,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Apex custom LLM exams must be configured by a parent or admin." }, { status: 403 });
     }
 
-    if (!findUser(studentId)) return NextResponse.json({ error: "Student not found." }, { status: 404 });
+    if (!(await findUser(studentId))) return NextResponse.json({ error: "Student not found." }, { status: 404 });
 
     const syllabusPattern = examPatternFor(input.subject);
     const pattern = plan.tier === "VELOCITY" || plan.tier === "APEX"

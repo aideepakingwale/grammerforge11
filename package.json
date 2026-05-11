@@ -11,6 +11,7 @@
     "db:generate": "prisma generate --schema database/prisma/schema.prisma",
     "db:migrate": "prisma migrate dev --schema database/prisma/schema.prisma",
     "db:push": "prisma db push --schema database/prisma/schema.prisma",
+    "db:seed": "node database/seed.postgres.mjs",
     "db:studio": "prisma studio --schema database/prisma/schema.prisma",
     "db:mysql:generate": "prisma generate --schema database/prisma/schema.mysql.prisma",
     "db:mysql:push": "prisma db push --schema database/prisma/schema.mysql.prisma",

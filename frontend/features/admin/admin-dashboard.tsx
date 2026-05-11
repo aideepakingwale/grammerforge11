@@ -19,14 +19,18 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Button } from "@/frontend/shared/ui/button";
+import { syllabusRegistry } from "@/backend/syllabus/registry";
 import type {
+  Difficulty,
   PlatformAnalytics,
   PlatformConfig,
   PublicPage,
+  Question,
   QuestionBankStats,
   QuestionGenerationJob,
   QuestionGenerationSchedule,
   SafeUser,
+  Subject,
   SubscriptionPlanConfig
 } from "@/backend/shared/types";
 
@@ -340,77 +344,155 @@ function ConfigPanel({ config, mutate }: { config: PlatformConfig; mutate: (url:
 }
 
 function PlansPanel({ plans, mutate }: { plans: SubscriptionPlanConfig[]; mutate: (url: string, options: RequestInit, success: string) => Promise<void> }) {
+  const orderedPlans = ["FOUNDATION", "ALPHA", "VELOCITY", "APEX"]
+    .map((tier) => plans.find((plan) => plan.tier === tier))
+    .filter(Boolean) as SubscriptionPlanConfig[];
+  const [drafts, setDrafts] = useState<Record<string, SubscriptionPlanConfig>>(() =>
+    Object.fromEntries(orderedPlans.map((plan) => [plan.tier, { ...plan, features: { ...plan.features } }]))
+  );
+
+  function updatePlanDraft(tier: string, key: keyof SubscriptionPlanConfig, value: string | number | boolean | null) {
+    setDrafts((current) => ({
+      ...current,
+      [tier]: {
+        ...current[tier],
+        [key]: value
+      }
+    }));
+  }
+
+  function updateFeatureDraft(tier: string, key: string, enabled: boolean) {
+    setDrafts((current) => ({
+      ...current,
+      [tier]: {
+        ...current[tier],
+        features: {
+          ...current[tier].features,
+          [key]: enabled
+        }
+      }
+    }));
+  }
+
+  const numericRows: Array<[keyof SubscriptionPlanConfig, string, string, number, number?]> = [
+    ["monthlyPricePence", "Monthly price (pence)", "Commercial monthly package price used by billing.", 0],
+    ["examLimitMonthly", "Monthly exam limit", "Blank means unlimited exams for the billing period.", 0],
+    ["aiInsightLimitMonthly", "Monthly AI insight limit", "Blank means unlimited parent/student AI insight reports.", 0],
+    ["dailySubjectLimit", "Daily subject allowance", "How many different subjects can be started per day. Blank means unlimited.", 0],
+    ["questionsPerExam", "Standard questions per exam", "Default count for Foundation and Alpha standard papers.", 1, 80],
+    ["durationMinutes", "Standard duration (minutes)", "Default timed paper duration for Foundation and Alpha.", 1, 100],
+    ["customExamMaxQuestions", "Custom exam max questions", "Upper limit for parent-built custom LLM exams.", 0, 80],
+    ["customExamMaxMinutes", "Custom exam max minutes", "Upper limit for custom exam duration.", 0, 100],
+    ["llmCustomExamsPerDay", "LLM custom exams per day", "How many on-demand LLM recipe exams a parent can create daily.", 0, 10]
+  ];
+
+  const booleanRows: Array<[keyof SubscriptionPlanConfig, string, string]> = [
+    ["isActive", "Plan active", "Whether the tier can currently be assigned or used."],
+    ["allowAllSubjectsDaily", "Allow all subjects daily", "Allows Maths, English, VR, and NVR in the same day."],
+    ["allowRepeatSubjectSameDay", "Repeat same subject daily", "Allows students to launch the same subject more than once per day."],
+    ["customExamEnabled", "Parent custom LLM exam", "Enables the Apex-style parent custom recipe builder."],
+    ["shareExamEnabled", "Share generated exams", "Allows generated exams to be shared with eligible families."]
+  ];
+
+  async function saveTier(tier: string) {
+    const plan = drafts[tier];
+    await mutate(`/api/admin/plans/${tier}`, { method: "PATCH", body: JSON.stringify(plan) }, `${tier} plan updated`);
+  }
+
   return (
-    <div className="grid gap-4 lg:grid-cols-3">
-      {plans.map((plan) => (
-        <form
-          key={plan.tier}
-          className="premium-card p-4"
-          action={(formData) => {
-            const features = Object.fromEntries(Object.keys(plan.features).map((key) => [key, formData.get(key) === "on"]));
-            const payload = {
-              name: String(formData.get("name")),
-              monthlyPricePence: Number(formData.get("monthlyPricePence")),
-              examLimitMonthly: String(formData.get("examLimitMonthly") || "") ? Number(formData.get("examLimitMonthly")) : null,
-              aiInsightLimitMonthly: String(formData.get("aiInsightLimitMonthly") || "") ? Number(formData.get("aiInsightLimitMonthly")) : null,
-              dailySubjectLimit: String(formData.get("dailySubjectLimit") || "") ? Number(formData.get("dailySubjectLimit")) : null,
-              questionsPerExam: Number(formData.get("questionsPerExam")),
-              durationMinutes: Number(formData.get("durationMinutes")),
-              allowAllSubjectsDaily: formData.get("allowAllSubjectsDaily") === "on",
-              allowRepeatSubjectSameDay: formData.get("allowRepeatSubjectSameDay") === "on",
-              customExamEnabled: formData.get("customExamEnabled") === "on",
-              customExamMaxQuestions: Number(formData.get("customExamMaxQuestions")),
-              customExamMaxMinutes: Number(formData.get("customExamMaxMinutes")),
-              llmCustomExamsPerDay: Number(formData.get("llmCustomExamsPerDay")),
-              shareExamEnabled: formData.get("shareExamEnabled") === "on",
-              isActive: formData.get("isActive") === "on",
-              features
-            };
-            void mutate(`/api/admin/plans/${plan.tier}`, { method: "PATCH", body: JSON.stringify(payload) }, `${plan.tier} plan updated`);
-          }}
-        >
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="text-xl font-black">{plan.tier}</h2>
-            <label className="inline-flex items-center gap-2 text-sm font-black">
-              <input name="isActive" type="checkbox" defaultChecked={plan.isActive} /> Active
-            </label>
-          </div>
-          <div className="mt-4 space-y-3">
-            <input className="field" name="name" defaultValue={plan.name} />
-            <input className="field" name="monthlyPricePence" type="number" defaultValue={plan.monthlyPricePence} />
-            <input className="field" name="examLimitMonthly" type="number" placeholder="Unlimited exams" defaultValue={plan.examLimitMonthly ?? ""} />
-            <input className="field" name="aiInsightLimitMonthly" type="number" placeholder="Unlimited AI insights" defaultValue={plan.aiInsightLimitMonthly ?? ""} />
-            <input className="field" name="dailySubjectLimit" type="number" placeholder="Daily subject limit" defaultValue={plan.dailySubjectLimit ?? ""} />
-            <input className="field" name="questionsPerExam" type="number" min={1} max={80} defaultValue={plan.questionsPerExam} />
-            <input className="field" name="durationMinutes" type="number" min={1} max={100} defaultValue={plan.durationMinutes} />
-            <input className="field" name="customExamMaxQuestions" type="number" min={0} max={80} defaultValue={plan.customExamMaxQuestions} />
-            <input className="field" name="customExamMaxMinutes" type="number" min={0} max={100} defaultValue={plan.customExamMaxMinutes} />
-            <input className="field" name="llmCustomExamsPerDay" type="number" min={0} max={10} defaultValue={plan.llmCustomExamsPerDay} />
-          </div>
-          <div className="mt-4 grid gap-2 text-sm font-bold">
-            {[
-              ["allowAllSubjectsDaily", "All subjects allowed daily", plan.allowAllSubjectsDaily],
-              ["allowRepeatSubjectSameDay", "Repeat same subject in one day", plan.allowRepeatSubjectSameDay],
-              ["customExamEnabled", "Parent custom LLM exam", plan.customExamEnabled],
-              ["shareExamEnabled", "Share generated exams", plan.shareExamEnabled]
-            ].map(([name, label, enabled]) => (
-              <label key={name as string} className="flex items-center justify-between rounded-md bg-paper px-3 py-2">
-                <span>{label as string}</span>
-                <input name={name as string} type="checkbox" defaultChecked={Boolean(enabled)} />
-              </label>
+    <div className="premium-card overflow-hidden">
+      <div className="border-b border-ink/10 p-4">
+        <h2 className="text-xl font-black">Subscription package matrix</h2>
+        <p className="mt-1 text-sm font-semibold text-ink/55">Each row is one configurable rule. Compare Foundation, Alpha, Velocity, and Apex side by side before saving a tier.</p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[980px] border-separate border-spacing-0 text-left text-sm">
+          <thead>
+            <tr className="bg-ink text-white">
+              <th className="sticky left-0 z-10 w-[300px] bg-ink px-4 py-3">Configuration field</th>
+              {orderedPlans.map((plan) => (
+                <th key={plan.tier} className="px-3 py-3">
+                  <input
+                    className="field bg-white text-ink"
+                    value={drafts[plan.tier]?.name ?? plan.name}
+                    onChange={(event) => updatePlanDraft(plan.tier, "name", event.target.value)}
+                  />
+                  <p className="mt-2 text-xs font-black uppercase text-white/60">{plan.tier}</p>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {numericRows.map(([key, label, help, min, max]) => (
+              <tr key={key as string} className="border-b border-ink/10">
+                <th className="sticky left-0 z-10 border-b border-ink/10 bg-white px-4 py-3 align-top">
+                  <p className="font-black">{label}</p>
+                  <p className="mt-1 text-xs font-semibold leading-5 text-ink/55">{help}</p>
+                </th>
+                {orderedPlans.map((plan) => (
+                  <td key={`${plan.tier}-${key as string}`} className="border-b border-ink/10 px-3 py-3 align-top">
+                    <input
+                      className="field"
+                      type="number"
+                      min={min}
+                      max={max}
+                      value={(drafts[plan.tier]?.[key] as number | null) ?? ""}
+                      placeholder="Unlimited"
+                      onChange={(event) => updatePlanDraft(plan.tier, key, event.target.value === "" ? null : Number(event.target.value))}
+                    />
+                  </td>
+                ))}
+              </tr>
             ))}
-          </div>
-          <div className="mt-4 space-y-2">
-            {Object.entries(plan.features).map(([key, enabled]) => (
-              <label key={key} className="flex items-center justify-between rounded-md bg-paper px-3 py-2 text-sm font-bold">
-                <span>{featureLabels[key] ?? key}</span>
-                <input name={key} type="checkbox" defaultChecked={enabled} />
-              </label>
+            {booleanRows.map(([key, label, help]) => (
+              <tr key={key as string}>
+                <th className="sticky left-0 z-10 border-b border-ink/10 bg-white px-4 py-3 align-top">
+                  <p className="font-black">{label}</p>
+                  <p className="mt-1 text-xs font-semibold leading-5 text-ink/55">{help}</p>
+                </th>
+                {orderedPlans.map((plan) => (
+                  <td key={`${plan.tier}-${key as string}`} className="border-b border-ink/10 px-3 py-3 text-center align-middle">
+                    <input
+                      className="h-5 w-5 accent-teal"
+                      type="checkbox"
+                      checked={Boolean(drafts[plan.tier]?.[key])}
+                      onChange={(event) => updatePlanDraft(plan.tier, key, event.target.checked)}
+                    />
+                  </td>
+                ))}
+              </tr>
             ))}
-          </div>
-          <Button className="mt-4 w-full"><ToggleLeft size={16} /> Save package</Button>
-        </form>
-      ))}
+            {Object.keys(orderedPlans[0]?.features ?? {}).map((feature) => (
+              <tr key={feature}>
+                <th className="sticky left-0 z-10 border-b border-ink/10 bg-white px-4 py-3 align-top">
+                  <p className="font-black">{featureLabels[feature] ?? feature}</p>
+                  <p className="mt-1 text-xs font-semibold leading-5 text-ink/55">Feature gate used by the app to enable or hide user functionality.</p>
+                </th>
+                {orderedPlans.map((plan) => (
+                  <td key={`${plan.tier}-${feature}`} className="border-b border-ink/10 px-3 py-3 text-center align-middle">
+                    <input
+                      className="h-5 w-5 accent-teal"
+                      type="checkbox"
+                      checked={Boolean(drafts[plan.tier]?.features?.[feature as keyof SubscriptionPlanConfig["features"]])}
+                      onChange={(event) => updateFeatureDraft(plan.tier, feature, event.target.checked)}
+                    />
+                  </td>
+                ))}
+              </tr>
+            ))}
+            <tr>
+              <th className="sticky left-0 z-10 bg-white px-4 py-4">Save package</th>
+              {orderedPlans.map((plan) => (
+                <td key={`${plan.tier}-save`} className="px-3 py-4">
+                  <Button className="w-full" type="button" onClick={() => void saveTier(plan.tier)}>
+                    <ToggleLeft size={16} /> Save {plan.name}
+                  </Button>
+                </td>
+              ))}
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -426,6 +508,19 @@ function QuestionsPanel({
   };
   mutate: (url: string, options: RequestInit, success: string) => Promise<void>;
 }) {
+  const [subject, setSubject] = useState<Subject>("MATHS");
+  const [topic, setTopic] = useState(syllabusRegistry.MATHS[0].name);
+  const [selectedSubTopics, setSelectedSubTopics] = useState<string[]>([]);
+  const [difficulty, setDifficulty] = useState<Difficulty>("MEDIUM");
+  const [questionType, setQuestionType] = useState<"MULTIPLE_CHOICE" | "SHORT_ANSWER">("MULTIPLE_CHOICE");
+  const [count, setCount] = useState(10);
+  const [provider, setProvider] = useState<"GEMINI" | "GROQ" | "INTERNAL">("GEMINI");
+  const [prompt, setPrompt] = useState("");
+  const [candidates, setCandidates] = useState<Question[]>([]);
+  const [selectedQuestionIds, setSelectedQuestionIds] = useState<string[]>([]);
+  const [working, setWorking] = useState("");
+  const [localError, setLocalError] = useState("");
+
   const fallback: QuestionGenerationSchedule = {
     enabled: false,
     subject: "MATHS",
@@ -441,69 +536,150 @@ function QuestionsPanel({
   const stats = initial?.stats;
   const schedule = initial?.schedule ?? fallback;
   const jobs = initial?.jobs ?? [];
+  const topics = syllabusRegistry[subject];
+  const selectedTopic = topics.find((item) => item.name === topic) ?? topics[0];
+  const visibleSubTopics = selectedTopic?.subTopics ?? [];
+
+  function changeSubject(nextSubject: Subject) {
+    const firstTopic = syllabusRegistry[nextSubject][0];
+    setSubject(nextSubject);
+    setTopic(firstTopic.name);
+    setSelectedSubTopics([]);
+    setPrompt("");
+    setCandidates([]);
+    setSelectedQuestionIds([]);
+  }
+
+  const generationPayload = {
+    subject,
+    difficulty,
+    questionType,
+    count,
+    microTopic: selectedSubTopics[0] ?? selectedTopic?.subTopics[0] ?? selectedTopic?.name ?? "Mixed 11+ Practice",
+    topic,
+    subTopics: selectedSubTopics.length ? selectedSubTopics : visibleSubTopics.slice(0, Math.min(4, visibleSubTopics.length)),
+    provider
+  };
+
+  async function previewPrompt() {
+    setWorking("preview");
+    setLocalError("");
+    const response = await fetch("/api/admin/questions/preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(generationPayload)
+    });
+    const json = await response.json();
+    setWorking("");
+    if (!response.ok) {
+      setLocalError(json.error ?? "Could not preview prompt");
+      return;
+    }
+    setPrompt(json.prompt);
+  }
+
+  async function generateCandidates() {
+    setWorking("generate");
+    setLocalError("");
+    const response = await fetch("/api/admin/questions/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...generationPayload, promptOverride: prompt || undefined })
+    });
+    const json = await response.json();
+    setWorking("");
+    if (!response.ok) {
+      setLocalError(json.error ?? "Could not generate questions");
+      return;
+    }
+    setPrompt(json.prompt);
+    setCandidates(json.questions ?? []);
+    setSelectedQuestionIds((json.questions ?? []).map((question: Question) => question.id));
+  }
+
+  async function importSelected() {
+    const questions = candidates.filter((question) => selectedQuestionIds.includes(question.id));
+    if (!questions.length) {
+      setLocalError("Select at least one generated question to import.");
+      return;
+    }
+    setWorking("import");
+    setLocalError("");
+    await mutate("/api/admin/questions/import", { method: "POST", body: JSON.stringify({ questions }) }, `${questions.length} question(s) imported`);
+    setWorking("");
+    setCandidates([]);
+    setSelectedQuestionIds([]);
+  }
+
+  function toggleSubTopic(subTopic: string) {
+    setSelectedSubTopics((current) =>
+      current.includes(subTopic) ? current.filter((item) => item !== subTopic) : [...current, subTopic]
+    );
+  }
+
+  function toggleQuestion(questionId: string) {
+    setSelectedQuestionIds((current) =>
+      current.includes(questionId) ? current.filter((id) => id !== questionId) : [...current, questionId]
+    );
+  }
 
   return (
     <div className="grid gap-4 lg:grid-cols-[420px_1fr]">
       <div className="space-y-4">
-        <form
-          className="premium-card p-4"
-          action={(formData) => {
-            const payload = {
-              subject: String(formData.get("subject")),
-              difficulty: String(formData.get("difficulty")),
-              questionType: String(formData.get("questionType")),
-              count: Number(formData.get("count")),
-              microTopic: String(formData.get("microTopic")),
-              topic: String(formData.get("topic") || "") || undefined,
-              subTopics: String(formData.get("subTopics") || "")
-                .split(",")
-                .map((item) => item.trim())
-                .filter(Boolean),
-              provider: String(formData.get("provider"))
-            };
-            void mutate("/api/admin/questions/generate", { method: "POST", body: JSON.stringify(payload) }, "LLM question generation completed");
-          }}
-        >
+        <div className="premium-card p-4">
           <div className="flex items-center gap-2">
             <Wand2 className="text-teal" size={22} />
-            <h2 className="text-xl font-black">Load questions on demand</h2>
+            <h2 className="text-xl font-black">Guided question generation</h2>
           </div>
           <p className="mt-2 text-sm font-semibold leading-6 text-ink/60">
-            Generate new question-bank items using the selected LLM provider. If no API key is configured, the local fallback still creates testable 11+ questions.
+            Select a subject, pick syllabus topics and subtopics, review the exact prompt, then import only approved questions.
           </p>
           <div className="mt-4 grid gap-3">
-            <select className="field" name="subject" defaultValue="MATHS">
+            <select className="field" value={subject} onChange={(event) => changeSubject(event.target.value as Subject)}>
               <option value="MATHS">Maths</option>
               <option value="ENGLISH">English</option>
               <option value="VERBAL_REASONING">Verbal Reasoning</option>
               <option value="NON_VERBAL_REASONING">Non-Verbal Reasoning</option>
             </select>
+            <select className="field" value={topic} onChange={(event) => { setTopic(event.target.value); setSelectedSubTopics([]); }}>
+              {topics.map((item) => <option key={item.slug} value={item.name}>{item.name}</option>)}
+            </select>
+            <div className="max-h-52 overflow-y-auto rounded-md border border-ink/10 bg-white p-2">
+              <p className="mb-2 text-xs font-black uppercase text-ink/45">Subtopics, multi-select allowed</p>
+              <div className="grid gap-2">
+                {visibleSubTopics.map((subTopic) => (
+                  <label key={subTopic} className="flex items-center gap-2 rounded-md bg-paper px-3 py-2 text-sm font-bold">
+                    <input type="checkbox" checked={selectedSubTopics.includes(subTopic)} onChange={() => toggleSubTopic(subTopic)} />
+                    {subTopic}
+                  </label>
+                ))}
+              </div>
+            </div>
             <div className="grid grid-cols-2 gap-2">
-              <select className="field" name="difficulty" defaultValue="MEDIUM">
+              <select className="field" value={difficulty} onChange={(event) => setDifficulty(event.target.value as Difficulty)}>
                 <option value="EASY">Easy</option>
                 <option value="MEDIUM">Medium</option>
                 <option value="HARD">Hard</option>
                 <option value="ADVANCED">Advanced</option>
               </select>
-              <select className="field" name="questionType" defaultValue="MULTIPLE_CHOICE">
+              <select className="field" value={questionType} onChange={(event) => setQuestionType(event.target.value as "MULTIPLE_CHOICE" | "SHORT_ANSWER")}>
                 <option value="MULTIPLE_CHOICE">Multiple choice</option>
                 <option value="SHORT_ANSWER">Short answer</option>
               </select>
             </div>
             <div className="grid grid-cols-[1fr_110px] gap-2">
-              <input className="field" name="microTopic" defaultValue="Fractions and reasoning" />
-              <input className="field" name="count" type="number" min={1} max={100} defaultValue={10} />
+              <select className="field" value={provider} onChange={(event) => setProvider(event.target.value as "GEMINI" | "GROQ" | "INTERNAL")}>
+                <option value="GEMINI">Gemini</option>
+                <option value="GROQ">Groq</option>
+                <option value="INTERNAL">Internal fallback</option>
+              </select>
+              <input className="field" type="number" min={1} max={100} value={count} onChange={(event) => setCount(Number(event.target.value))} />
             </div>
-            <input className="field" name="topic" placeholder="Optional topic group, e.g. Fractions, Decimals & Percentages" />
-            <input className="field" name="subTopics" placeholder="Optional sub-topics in proportion, comma separated" />
-            <select className="field" name="provider" defaultValue="GEMINI">
-              <option value="GEMINI">Gemini</option>
-              <option value="GROQ">Groq</option>
-              <option value="INTERNAL">Internal fallback</option>
-            </select>
-            <Button className="w-full"><Wand2 size={16} /> Generate now</Button>
+            <Button type="button" className="w-full" onClick={() => void previewPrompt()} disabled={working === "preview"}>
+              <BookOpen size={16} /> {working === "preview" ? "Preparing prompt..." : "Preview generation prompt"}
+            </Button>
           </div>
-        </form>
+        </div>
 
         <form
           className="premium-card p-4"
@@ -583,6 +759,77 @@ function QuestionsPanel({
       </div>
 
       <div className="space-y-4">
+        <div className="premium-card p-4">
+          <h2 className="text-xl font-black">Prompt approval</h2>
+          <p className="mt-1 text-sm font-semibold text-ink/55">Review or amend this prompt before sending it to the selected LLM provider.</p>
+          <textarea
+            className="field mt-3 min-h-80 font-mono text-xs leading-5"
+            value={prompt}
+            onChange={(event) => setPrompt(event.target.value)}
+            placeholder="Click Preview generation prompt to build the prompt from subject, topic, subtopics, difficulty, and question type."
+          />
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button type="button" onClick={() => void generateCandidates()} disabled={!prompt || working === "generate"}>
+              <Wand2 size={16} /> {working === "generate" ? "Generating..." : "Generate candidates"}
+            </Button>
+            <button
+              type="button"
+              className="inline-flex min-h-11 items-center rounded-md border border-ink/10 px-4 text-sm font-black"
+              onClick={() => setPrompt("")}
+            >
+              Clear prompt
+            </button>
+          </div>
+          {localError && <p className="mt-3 rounded-md bg-coral/10 p-3 text-sm font-bold text-coral">{localError}</p>}
+        </div>
+
+        {candidates.length > 0 && (
+          <div className="premium-card p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-xl font-black">Generated question review</h2>
+                <p className="mt-1 text-sm font-semibold text-ink/55">Select the questions that are good enough to import into the master question bank.</p>
+              </div>
+              <Button type="button" onClick={() => void importSelected()} disabled={working === "import"}>
+                <Save size={16} /> Import selected ({selectedQuestionIds.length})
+              </Button>
+            </div>
+            <div className="mt-4 space-y-3">
+              {candidates.map((question, index) => (
+                <div key={question.id} className="rounded-md border border-ink/10 bg-white p-4">
+                  <label className="flex items-start gap-3">
+                    <input className="mt-1 h-5 w-5 accent-teal" type="checkbox" checked={selectedQuestionIds.includes(question.id)} onChange={() => toggleQuestion(question.id)} />
+                    <span>
+                      <span className="font-black">Question {index + 1}: {question.topic} / {question.microTopic}</span>
+                      <span className="mt-1 block text-sm font-semibold text-ink/60">{question.instruction}</span>
+                    </span>
+                  </label>
+                  {question.stimulus && (
+                    <div className="mt-3 rounded-md bg-paper p-3">
+                      <p className="text-xs font-black uppercase text-ink/45">{question.stimulus.title}</p>
+                      <p className="mt-1 whitespace-pre-wrap text-sm leading-6">{question.stimulus.content}</p>
+                    </div>
+                  )}
+                  <p className="mt-3 font-semibold">{question.questionData.content}</p>
+                  {question.options.length > 0 && (
+                    <div className="mt-3 grid gap-2 md:grid-cols-2">
+                      {question.options.map((option, optionIndex) => (
+                        <div key={`${question.id}-${optionIndex}`} className="rounded-md border border-ink/10 bg-paper p-2 text-sm font-semibold">
+                          {String.fromCharCode(65 + optionIndex)}. {option.content}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="mt-3 rounded-md bg-teal/10 p-3 text-sm">
+                    <p className="font-black text-teal">Answer: {question.answer}</p>
+                    <p className="mt-1 leading-6 text-ink/70">{question.explanation}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="premium-card p-4">
           <h2 className="text-xl font-black">Question bank status</h2>
           <div className="mt-4 grid gap-3 md:grid-cols-3">

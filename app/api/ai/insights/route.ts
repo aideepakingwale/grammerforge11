@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/backend/auth/session";
 import { dashboardInsights } from "@/backend/ai/insights";
-import { findUser, listStudentsFor, planHasFeature } from "@/backend/exams/demo-store";
+import { findUser, listStudentsFor } from "@/backend/auth/users";
+import { planHasFeature } from "@/backend/exams/demo-store";
 
 const schema = z.object({
   audience: z.enum(["parent", "student"]),
@@ -18,7 +19,7 @@ export async function POST(request: Request) {
   const student =
     user.role === "STUDENT"
       ? user
-      : findUser(input.studentId ?? listStudentsFor(user.id)[0]?.id ?? "");
+      : await findUser(input.studentId ?? (await listStudentsFor(user.id))[0]?.id ?? "");
   if (!student) return NextResponse.json({ error: "Student not found" }, { status: 404 });
   return NextResponse.json({ insight: await dashboardInsights(student, input.audience) });
 }

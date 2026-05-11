@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import type { FormEvent } from "react";
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { CreditCard, FileText, Sparkles, Target, TrendingUp, Users } from "lucide-react";
+import { CreditCard, FileText, Link, Sparkles, Target, TrendingUp, Users } from "lucide-react";
 import { Button } from "@/frontend/shared/ui/button";
 import { ExamLauncher } from "@/frontend/features/exams/exam-launcher";
 import { LogoutButton } from "@/frontend/features/navigation/logout-button";
-import type { Exam, Insight, SafeUser, Tier } from "@/backend/shared/types";
+import type { Exam, Insight, SafeUser, SubscriptionPlanConfig, Tier } from "@/backend/shared/types";
 import { subjectLabel } from "@/backend/shared/utils";
 import type { PerformanceRow } from "@/backend/analytics/performance";
 
@@ -16,6 +17,7 @@ type ParentData = {
   selectedStudent?: SafeUser;
   exams: Exam[];
   insight?: Insight;
+  plan: SubscriptionPlanConfig;
   performance: {
     subjects: PerformanceRow[];
     topics: PerformanceRow[];
@@ -28,6 +30,8 @@ type ParentData = {
 export function ParentDashboard() {
   const [data, setData] = useState<ParentData | null>(null);
   const [billing, setBilling] = useState("");
+  const [studentMessage, setStudentMessage] = useState("");
+  const [studentError, setStudentError] = useState("");
 
   useEffect(() => {
     fetch("/api/dashboard/parent")
@@ -60,6 +64,35 @@ export function ParentDashboard() {
     const json = await response.json();
     if (json.url) location.href = json.url;
     else setBilling(json.message ?? "Billing demo mode");
+  }
+
+  async function createStudent(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setStudentMessage("");
+    setStudentError("");
+    const formData = new FormData(event.currentTarget);
+    const response = await fetch("/api/parent/students", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        firstName: String(formData.get("firstName") ?? ""),
+        lastName: String(formData.get("lastName") ?? ""),
+        email: String(formData.get("email") ?? ""),
+        password: String(formData.get("password") ?? "")
+      })
+    });
+    const json = await response.json();
+    if (!response.ok) {
+      setStudentError(json.error ?? "Could not link student");
+      return;
+    }
+    setStudentMessage(json.message ?? "Student linked.");
+    setData((current) => current ? {
+      ...current,
+      students: [...current.students, json.student],
+      selectedStudent: current.selectedStudent ?? json.student
+    } : current);
+    event.currentTarget.reset();
   }
 
   if (!data) return <main className="app-shell p-6">Loading dashboard...</main>;
@@ -95,6 +128,28 @@ export function ParentDashboard() {
             <p className="mt-3 text-3xl font-black">{data.user.subscriptionTier}</p>
           </div>
         </div>
+
+        {data.students.length === 0 && (
+          <section className="premium-card mb-4 p-5">
+            <div className="flex items-start gap-3">
+              <div className="rounded-md bg-teal/10 p-2 text-teal"><Link size={22} /></div>
+              <div>
+                <p className="eyebrow">Student setup</p>
+                <h2 className="mt-1 text-2xl font-black">Link Devansh or another student</h2>
+                <p className="mt-1 text-sm leading-6 text-ink/65">Create a verified student account so exams, progress, rewards, and parent analytics are connected to your family account.</p>
+              </div>
+            </div>
+            <form className="mt-4 grid gap-3 md:grid-cols-5" onSubmit={createStudent}>
+              <input className="field" name="firstName" placeholder="Student first name" defaultValue="Devansh" required />
+              <input className="field" name="lastName" placeholder="Student last name" defaultValue="Ingwale" required />
+              <input className="field md:col-span-2" name="email" type="email" placeholder="Student real email" required />
+              <input className="field" name="password" type="password" minLength={8} placeholder="Password" required />
+              <Button className="md:col-span-5" type="submit">Create and link student</Button>
+            </form>
+            {studentMessage && <p className="mt-3 rounded-md bg-teal/10 p-3 text-sm font-semibold text-teal">{studentMessage}</p>}
+            {studentError && <p className="mt-3 rounded-md bg-coral/10 p-3 text-sm font-semibold text-coral">{studentError}</p>}
+          </section>
+        )}
 
         <div className="grid gap-4 lg:grid-cols-[1.25fr_.75fr]">
           <section className="premium-card p-4">
@@ -180,7 +235,18 @@ export function ParentDashboard() {
           </section>
 
           <section className="space-y-4">
-            <ExamLauncher />
+            {data.selectedStudent ? (
+              <ExamLauncher
+                plan={data.plan}
+                customAllowed={data.plan.customExamEnabled}
+                proctorAllowed={data.plan.features.SECURE_PROCTORING}
+              />
+            ) : (
+              <div className="premium-card p-4">
+                <h2 className="font-black">Exam launcher locked</h2>
+                <p className="mt-2 text-sm leading-6 text-ink/65">Create and link a student profile before launching parent-managed exams.</p>
+              </div>
+            )}
             <div className="premium-card p-4">
               <h2 className="flex items-center gap-2 font-black"><CreditCard size={18} /> Billing</h2>
               <p className="my-3 text-sm leading-6 text-ink/65">Stripe-ready checkout switches from demo to live when keys are configured.</p>

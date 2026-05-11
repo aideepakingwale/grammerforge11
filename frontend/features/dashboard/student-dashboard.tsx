@@ -5,13 +5,14 @@ import { Award, BookOpenCheck, Crown, Flag, Gift, Palette, Rocket, ShieldCheck, 
 import { ExamLauncher } from "@/frontend/features/exams/exam-launcher";
 import { LogoutButton } from "@/frontend/features/navigation/logout-button";
 import { calculateGamification } from "@/backend/gamification/rewards";
-import type { Exam, Insight, SafeUser } from "@/backend/shared/types";
+import type { Exam, Insight, SafeUser, SubscriptionPlanConfig } from "@/backend/shared/types";
 import { subjectLabel } from "@/backend/shared/utils";
 
 type StudentData = {
   user: SafeUser;
   exams: Exam[];
   insight: Insight;
+  plan: SubscriptionPlanConfig;
 };
 
 export function StudentDashboard() {
@@ -139,7 +140,11 @@ export function StudentDashboard() {
               })}
             </div>
           </section>
-          <ExamLauncher />
+          <ExamLauncher
+            plan={data.plan}
+            customAllowed={data.plan.customExamEnabled}
+            proctorAllowed={data.plan.features.SECURE_PROCTORING}
+          />
         </div>
 
         <section className="premium-card mt-4 p-5">
