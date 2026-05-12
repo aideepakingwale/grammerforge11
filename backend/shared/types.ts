@@ -19,7 +19,8 @@ export type SafeUser = {
 };
 
 export type AdminUserInput = {
-  email: string;
+  email?: string;
+  username?: string;
   password?: string;
   firstName: string;
   lastName: string;
@@ -212,7 +213,12 @@ export type QuestionBankBrowserResult = {
     topic?: string;
     microTopic?: string;
   };
+  page: number;
+  limit: number;
   total: number;
+  totalPages: number;
+  sortBy: "updatedAt" | "topic" | "microTopic" | "difficultyLevel" | "questionType";
+  sortDir: "asc" | "desc";
   source: "database" | "starter_bank";
   topics: Array<{
     subjectType: Subject;

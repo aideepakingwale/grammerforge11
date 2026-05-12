@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { BookOpen, CalendarClock, Database, Save, Wand2 } from "lucide-react";
+import { BookOpen, CalendarClock, Database, Save, Trash2, Wand2 } from "lucide-react";
 import { Button } from "@/frontend/shared/ui/button";
 import { syllabusRegistry } from "@/backend/syllabus/registry";
 import type {
@@ -380,13 +380,18 @@ function QuestionBankBrowser() {
   const [subject, setSubject] = useState<Subject>("MATHS");
   const [topic, setTopic] = useState("");
   const [microTopic, setMicroTopic] = useState("");
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
+  const [sortBy, setSortBy] = useState<QuestionBankBrowserResult["sortBy"]>("updatedAt");
+  const [sortDir, setSortDir] = useState<QuestionBankBrowserResult["sortDir"]>("desc");
+  const [refreshKey, setRefreshKey] = useState(0);
   const [data, setData] = useState<QuestionBankBrowserResult | null>(null);
   const topicOptions = data?.topics.filter((item) => item.subjectType === subject) ?? [];
   const microTopicOptions = data?.microTopics.filter((item) => item.subjectType === subject && (!topic || item.topic === topic)) ?? [];
 
   useEffect(() => {
     const controller = new AbortController();
-    const params = new URLSearchParams({ subject, limit: "30" });
+    const params = new URLSearchParams({ subject, limit: String(limit), page: String(page), sortBy, sortDir });
     if (topic) params.set("topic", topic);
     if (microTopic) params.set("microTopic", microTopic);
     fetch(`/api/admin/questions/bank?${params.toString()}`, { cache: "no-store", signal: controller.signal })
@@ -396,7 +401,17 @@ function QuestionBankBrowser() {
         if (!controller.signal.aborted) setData(null);
       });
     return () => controller.abort();
-  }, [subject, topic, microTopic]);
+  }, [subject, topic, microTopic, page, limit, sortBy, sortDir, refreshKey]);
+
+  async function updateQuestion(questionId: string, payload: object) {
+    await fetch(`/api/admin/questions/bank/${questionId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    setRefreshKey((value) => value + 1);
+  }
+
+  async function deleteQuestion(questionId: string) {
+    await fetch(`/api/admin/questions/bank/${questionId}`, { method: "DELETE" });
+    setRefreshKey((value) => value + 1);
+  }
 
   return (
     <div className="premium-card p-4">
@@ -407,29 +422,56 @@ function QuestionBankBrowser() {
         </div>
         {!data && <span className="chip">Loading</span>}
       </div>
-      <div className="mt-4 grid gap-2 md:grid-cols-3">
-        <select className="field" value={subject} onChange={(event) => { setSubject(event.target.value as Subject); setTopic(""); setMicroTopic(""); }}>
+      <div className="mt-4 grid gap-2 md:grid-cols-3 xl:grid-cols-6">
+        <select className="field" value={subject} onChange={(event) => { setSubject(event.target.value as Subject); setTopic(""); setMicroTopic(""); setPage(1); }}>
           <option value="MATHS">Maths</option><option value="ENGLISH">English</option><option value="VERBAL_REASONING">Verbal Reasoning</option><option value="NON_VERBAL_REASONING">Non-Verbal Reasoning</option>
         </select>
-        <select className="field" value={topic} onChange={(event) => { setTopic(event.target.value); setMicroTopic(""); }}>
+        <select className="field" value={topic} onChange={(event) => { setTopic(event.target.value); setMicroTopic(""); setPage(1); }}>
           <option value="">All topics</option>
           {topicOptions.map((item) => <option key={item.topic} value={item.topic}>{item.topic} ({item.count})</option>)}
         </select>
-        <select className="field" value={microTopic} onChange={(event) => setMicroTopic(event.target.value)}>
+        <select className="field" value={microTopic} onChange={(event) => { setMicroTopic(event.target.value); setPage(1); }}>
           <option value="">All subtopics</option>
           {microTopicOptions.map((item) => <option key={item.microTopic} value={item.microTopic}>{item.microTopic} ({item.count})</option>)}
         </select>
+        <select className="field" value={sortBy} onChange={(event) => { setSortBy(event.target.value as QuestionBankBrowserResult["sortBy"]); setPage(1); }}>
+          <option value="updatedAt">Recently updated</option><option value="topic">Topic</option><option value="microTopic">Subtopic</option><option value="difficultyLevel">Difficulty</option><option value="questionType">Question type</option>
+        </select>
+        <select className="field" value={sortDir} onChange={(event) => { setSortDir(event.target.value as QuestionBankBrowserResult["sortDir"]); setPage(1); }}>
+          <option value="desc">Descending</option><option value="asc">Ascending</option>
+        </select>
+        <select className="field" value={limit} onChange={(event) => { setLimit(Number(event.target.value)); setPage(1); }}>
+          <option value={10}>10 per page</option><option value={25}>25 per page</option><option value={50}>50 per page</option>
+        </select>
+      </div>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-md bg-paper p-3 text-sm font-bold text-ink/60">
+        <span>Page {data?.page ?? page} of {data?.totalPages ?? 1}</span>
+        <div className="flex gap-2">
+          <button type="button" className="rounded-md border border-ink/10 bg-white px-3 py-2 font-black disabled:opacity-40" disabled={(data?.page ?? page) <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>Previous</button>
+          <button type="button" className="rounded-md border border-ink/10 bg-white px-3 py-2 font-black disabled:opacity-40" disabled={(data?.page ?? page) >= (data?.totalPages ?? 1)} onClick={() => setPage((current) => current + 1)}>Next</button>
+        </div>
       </div>
       <div className="mt-4 space-y-3">
         {data?.questions.length === 0 && <p className="rounded-md bg-paper p-3 text-sm font-semibold text-ink/55">No questions found for this filter.</p>}
         {data?.questions.map((question) => (
           <div key={question.id} className="rounded-md border border-ink/10 bg-white p-3">
-            <div className="flex flex-wrap items-start justify-between gap-2">
+            <div className="flex flex-wrap items-start justify-between gap-2 border-b border-ink/10 pb-2">
               <div>
                 <p className="text-sm font-black">{question.topic} / {question.microTopic}</p>
                 <p className="mt-1 text-xs font-bold text-ink/45">{formatEnumLabel(question.subjectType)} · {formatEnumLabel(question.questionType)} · {formatEnumLabel(question.difficultyLevel)}</p>
               </div>
               <span className="chip">{question.id.slice(0, 8)}</span>
+            </div>
+            <div className="mt-3 grid gap-2 md:grid-cols-[1fr_1fr_auto]">
+              <select className="field" defaultValue={question.difficultyLevel} onChange={(event) => void updateQuestion(question.id, { difficultyLevel: event.target.value })}>
+                {["EASY", "MEDIUM", "HARD", "ADVANCED"].map((item) => <option key={item} value={item}>{formatEnumLabel(item)}</option>)}
+              </select>
+              <select className="field" defaultValue={question.questionType} onChange={(event) => void updateQuestion(question.id, { questionType: event.target.value })}>
+                {["MULTIPLE_CHOICE", "SHORT_ANSWER"].map((item) => <option key={item} value={item}>{formatEnumLabel(item)}</option>)}
+              </select>
+              <button type="button" className="inline-flex min-h-11 items-center justify-center rounded-md border border-coral/30 px-3 font-bold text-coral" onClick={() => void deleteQuestion(question.id)}>
+                <Trash2 size={16} />
+              </button>
             </div>
             {question.stimulus && <div className="mt-3 rounded-md bg-paper p-3"><p className="text-xs font-black uppercase text-ink/45">{question.stimulus.title}</p><QuestionVisual payload={question.stimulus} /></div>}
             <div className="mt-3 text-sm font-semibold"><QuestionVisual payload={question.questionData} /></div>

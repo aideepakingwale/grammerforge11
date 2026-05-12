@@ -10,6 +10,7 @@ import { PlansPanel } from "@/frontend/features/admin/panels/plans-panel";
 import { QuestionsPanel } from "@/frontend/features/admin/panels/questions-panel";
 import { ReportsPanel } from "@/frontend/features/admin/panels/reports-panel";
 import { PagesPanel } from "@/frontend/features/admin/panels/pages-panel";
+import { ExamsPanel } from "@/frontend/features/admin/panels/exams-panel";
 import type { PlatformAnalytics, PlatformConfig, PublicPage, QuestionBankStats, QuestionGenerationJob, QuestionGenerationSchedule, SafeUser, SubscriptionPlanConfig } from "@/backend/shared/types";
 
 type AdminData = {
@@ -31,6 +32,7 @@ const tabs = [
   ["config", "Config", KeyRound],
   ["plans", "Plans", CreditCard],
   ["questions", "Questions", Wand2],
+  ["exams", "Exams", BookCheck],
   ["reports", "Reports", BarChart3],
   ["pages", "Pages", FileText]
 ] as const;
@@ -205,6 +207,7 @@ export function AdminDashboard() {
           {active === "config" && <ConfigPanel config={data.config} mutate={mutate} />}
           {active === "plans" && <PlansPanel key={data.plans.map((plan) => plan.updatedAt).join(":")} plans={data.plans} mutate={mutate} />}
           {active === "questions" && <QuestionsPanel initial={data.questionGeneration} mutate={mutate} />}
+          {active === "exams" && <ExamsPanel mutate={mutate} />}
           {active === "reports" && <ReportsPanel analytics={data.analytics} />}
           {active === "pages" && <PagesPanel pages={data.pages} mutate={mutate} />}
         </section>

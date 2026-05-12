@@ -126,9 +126,15 @@ export async function saveQuestionsToQuestionMaster(questions: Question[], sourc
   }
 }
 
-export async function browseQuestionBank(input: { subject?: Subject; topic?: string; microTopic?: string; limit?: number }): Promise<QuestionBankBrowserResult> {
+type QuestionBankSortBy = QuestionBankBrowserResult["sortBy"];
+type QuestionBankSortDir = QuestionBankBrowserResult["sortDir"];
+
+export async function browseQuestionBank(input: { subject?: Subject; topic?: string; microTopic?: string; limit?: number; page?: number; sortBy?: QuestionBankSortBy; sortDir?: QuestionBankSortDir }): Promise<QuestionBankBrowserResult> {
   const limit = Math.min(Math.max(input.limit ?? 25, 1), 100);
-  if (!hasConfiguredQuestionDatabase()) return browseStarterQuestionBank(input, limit);
+  const page = Math.max(input.page ?? 1, 1);
+  const sortBy = input.sortBy ?? "updatedAt";
+  const sortDir = input.sortDir ?? "desc";
+  if (!hasConfiguredQuestionDatabase()) return browseStarterQuestionBank(input, limit, page, sortBy, sortDir);
 
   try {
     const where = {
@@ -153,7 +159,8 @@ export async function browseQuestionBank(input: { subject?: Subject; topic?: str
       }),
       prisma.questionMaster.findMany({
         where,
-        orderBy: [{ updatedAt: "desc" }],
+        orderBy: [questionBankOrderBy(sortBy, sortDir)],
+        skip: (page - 1) * limit,
         take: limit,
         select: {
           id: true,
@@ -179,15 +186,50 @@ export async function browseQuestionBank(input: { subject?: Subject; topic?: str
     ]);
     return {
       filters: { subject: input.subject, topic: input.topic, microTopic: input.microTopic },
+      page,
+      limit,
       total,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+      sortBy,
+      sortDir,
       source: "database",
       topics: topicRows.map((row) => ({ subjectType: row.subjectType, topic: row.topic, count: row._count._all })),
       microTopics: microTopicRows.map((row) => ({ subjectType: row.subjectType, topic: row.topic, microTopic: row.microTopic, count: row._count._all })),
       questions: rows.map(mapQuestionMasterRow)
     };
   } catch {
-    return browseStarterQuestionBank(input, limit);
+    return browseStarterQuestionBank(input, limit, page, sortBy, sortDir);
   }
+}
+
+export async function updateQuestionBankRecord(questionId: string, input: { difficultyLevel?: Question["difficultyLevel"]; questionType?: Question["questionType"]; isActive?: boolean }) {
+  if (hasConfiguredQuestionDatabase()) {
+    return prisma.questionMaster.update({
+      where: { id: questionId },
+      data: {
+        ...(input.difficultyLevel ? { difficultyLevel: input.difficultyLevel } : {}),
+        ...(input.questionType ? { questionType: input.questionType } : {}),
+        ...("isActive" in input ? { isActive: input.isActive } : {})
+      }
+    });
+  }
+  const question = questionBank.find((candidate) => candidate.id === questionId);
+  if (!question) throw new Error("Question not found.");
+  if (input.difficultyLevel) question.difficultyLevel = input.difficultyLevel;
+  if (input.questionType) question.questionType = input.questionType;
+  return question;
+}
+
+export async function deleteQuestionBankRecord(questionId: string) {
+  if (hasConfiguredQuestionDatabase()) {
+    await prisma.questionMaster.update({ where: { id: questionId }, data: { isActive: false } });
+    return { ok: true };
+  }
+  const before = questionBank.length;
+  const index = questionBank.findIndex((question) => question.id === questionId);
+  if (index >= 0) questionBank.splice(index, 1);
+  if (questionBank.length === before) throw new Error("Question not found.");
+  return { ok: true };
 }
 
 export async function filterUniqueQuestions(questions: Question[], options: { includeStarterBank?: boolean; includeVector?: boolean } = {}) {
@@ -311,15 +353,21 @@ function toJson(value: unknown): Prisma.InputJsonValue | undefined {
   return value as Prisma.InputJsonValue;
 }
 
-function browseStarterQuestionBank(input: { subject?: Subject; topic?: string; microTopic?: string }, limit: number): QuestionBankBrowserResult {
+function browseStarterQuestionBank(input: { subject?: Subject; topic?: string; microTopic?: string }, limit: number, page: number, sortBy: QuestionBankSortBy, sortDir: QuestionBankSortDir): QuestionBankBrowserResult {
   const filtered = questionBank.filter((question) =>
     (!input.subject || question.subjectType === input.subject) &&
     (!input.topic || question.topic === input.topic) &&
     (!input.microTopic || question.microTopic === input.microTopic)
   );
+  const sorted = filtered.slice().sort((left, right) => compareQuestions(left, right, sortBy, sortDir));
   return {
     filters: { subject: input.subject, topic: input.topic, microTopic: input.microTopic },
+    page,
+    limit,
     total: filtered.length,
+    totalPages: Math.max(1, Math.ceil(filtered.length / limit)),
+    sortBy,
+    sortDir,
     source: "starter_bank",
     topics: countBy(questionBank.filter((question) => !input.subject || question.subjectType === input.subject), (question) => `${question.subjectType}|||${question.topic ?? question.microTopic}`).map(([key, count]) => {
       const [subjectType, topic] = key.split("|||");
@@ -329,8 +377,23 @@ function browseStarterQuestionBank(input: { subject?: Subject; topic?: string; m
       const [subjectType, topic, microTopic] = key.split("|||");
       return { subjectType: subjectType as Subject, topic, microTopic, count };
     }),
-    questions: filtered.slice(0, limit)
+    questions: sorted.slice((page - 1) * limit, page * limit)
   };
+}
+
+function questionBankOrderBy(sortBy: QuestionBankSortBy, sortDir: QuestionBankSortDir) {
+  if (sortBy === "topic") return { topic: sortDir };
+  if (sortBy === "microTopic") return { microTopic: sortDir };
+  if (sortBy === "difficultyLevel") return { difficultyLevel: sortDir };
+  if (sortBy === "questionType") return { questionType: sortDir };
+  return { updatedAt: sortDir };
+}
+
+function compareQuestions(left: Question, right: Question, sortBy: QuestionBankSortBy, sortDir: QuestionBankSortDir) {
+  const direction = sortDir === "asc" ? 1 : -1;
+  const leftValue = sortBy === "updatedAt" ? left.id : String(left[sortBy] ?? "");
+  const rightValue = sortBy === "updatedAt" ? right.id : String(right[sortBy] ?? "");
+  return leftValue.localeCompare(rightValue) * direction;
 }
 
 function countBy<T>(items: T[], keyFor: (item: T) => string) {

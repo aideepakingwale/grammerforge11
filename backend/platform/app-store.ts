@@ -32,7 +32,7 @@ function seedStore(): Store {
       {
         id: parentId,
         role: "PARENT",
-        subscriptionTier: "APEX",
+        subscriptionTier: "FOUNDATION",
         email: "parent@example.com",
         passwordHash,
         firstName: "Deepak",
@@ -52,7 +52,7 @@ function seedStore(): Store {
       {
         id: studentId,
         role: "STUDENT",
-        subscriptionTier: "APEX",
+        subscriptionTier: "FOUNDATION",
         email: "student@example.com",
         passwordHash,
         firstName: "Devansh",
@@ -78,11 +78,13 @@ export function store() {
   if (demoStudent) {
     demoStudent.firstName = "Devansh";
     demoStudent.lastName = "Ingwale";
+    demoStudent.subscriptionTier = "FOUNDATION";
   }
   const demoParent = globalThis.grammarForgeStore.users.find((user) => user.id === parentId);
   if (demoParent) {
     demoParent.firstName = "Deepak";
     demoParent.lastName = "Ingwale";
+    demoParent.subscriptionTier = "FOUNDATION";
   }
   const demoAdmin = globalThis.grammarForgeStore.users.find((user) => user.id === adminId || user.email === "admin@example.com");
   if (demoAdmin) {

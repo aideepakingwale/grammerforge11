@@ -1,20 +1,22 @@
 "use client";
 
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { Activity, Database, Shield, Users } from "lucide-react";
+import { Activity, BookOpen, Brain, CreditCard, Database, GraduationCap, Shield, ShieldCheck, UserRoundCheck, Users } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import type { PlatformAnalytics } from "@/backend/shared/types";
 
 const chartColors = ["#4f46e5", "#06b6d4", "#10b981", "#f59e0b", "#e11d48", "#8b5cf6"];
 
 export function ReportsPanel({ analytics }: { analytics: PlatformAnalytics }) {
-  const rows = [
-    ["Students", analytics.students],
-    ["Parents", analytics.parents],
-    ["Admins", analytics.admins],
-    ["Exams started", analytics.examsStarted],
-    ["Audit events", analytics.auditEvents],
-    ["AI insights cached", analytics.aiInsightsCached],
-    ["Question bank size", analytics.questionBankSize]
+  const rows: Array<[string, number, LucideIcon, string]> = [
+    ["Students", analytics.students, GraduationCap, "Learner accounts"],
+    ["Parents", analytics.parents, UserRoundCheck, "Guardian accounts"],
+    ["Admins", analytics.admins, ShieldCheck, "Operator access"],
+    ["Exams started", analytics.examsStarted, Activity, "Student sessions"],
+    ["Subscriptions", analytics.activeSubscriptions, CreditCard, "Active paid tiers"],
+    ["Audit events", analytics.auditEvents, Shield, "Proctoring logs"],
+    ["AI insights cached", analytics.aiInsightsCached, Brain, "Generated reports"],
+    ["Question bank size", analytics.questionBankSize, BookOpen, "Reusable questions"]
   ];
 
   const userMix = [
@@ -49,12 +51,13 @@ export function ReportsPanel({ analytics }: { analytics: PlatformAnalytics }) {
         </div>
       </div>
 
-      <div className="mt-5 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-        {rows.map(([label, value]) => (
+      <div className="mt-5 grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+        {rows.map(([label, value, Icon, sub]) => (
           <div key={label as string} className="stat-card p-4">
-            <Database className="text-teal" size={20} />
+            <Icon className="text-teal" size={20} />
             <p className="mt-3 text-2xl font-black">{value}</p>
             <p className="text-sm font-bold text-ink/55">{label}</p>
+            <p className="text-xs font-semibold text-ink/40">{sub}</p>
           </div>
         ))}
       </div>
