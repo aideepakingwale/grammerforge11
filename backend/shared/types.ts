@@ -72,6 +72,14 @@ export type LlmGenerationMeta = {
     candidatesTokenCount?: number;
     totalTokenCount?: number;
   };
+  batches?: Array<{
+    index: number;
+    requestedCount: number;
+    returnedCount: number;
+    uniqueCount: number;
+    duplicateCount: number;
+    provider: LlmProvider;
+  }>;
   duplicateRejectedCount?: number;
   duplicateRejections?: Array<{
     questionId: string;

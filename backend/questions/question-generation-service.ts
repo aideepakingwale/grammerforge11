@@ -1,5 +1,5 @@
 import { questionBank } from "@/backend/questions/question-bank";
-import type { LlmProvider, PlatformConfig, Question, QuestionBankStats, QuestionGenerationJob, QuestionGenerationSchedule } from "@/backend/shared/types";
+import type { LlmGenerationMeta, LlmProvider, PlatformConfig, Question, QuestionBankStats, QuestionGenerationJob, QuestionGenerationSchedule } from "@/backend/shared/types";
 import { uid } from "@/backend/shared/utils";
 import { enrichQuestionSyllabus, topicForSubTopic } from "@/backend/syllabus/registry";
 import { nextScheduleRun } from "@/backend/platform/defaults";
@@ -178,29 +178,193 @@ export function previewQuestionGeneration(input: QuestionGenerationInput) {
 export async function generateQuestionCandidates(input: QuestionGenerationInput & { promptOverride?: string }) {
   const generationPlan = buildQuestionGenerationPlan(input);
   const basePrompt = input.promptOverride?.trim() || buildLlmQuestionPrompt(input, generationPlan);
-  let prompt = basePrompt;
-  let result = input.promptOverride?.trim()
-    ? await generateAdminQuestionsWithPrompt(input, generationPlan, input.promptOverride.trim())
-    : await generateAdminQuestions(input, generationPlan);
-
-  let unique = await filterUniqueQuestions(result.questions);
-  if (input.provider !== "INTERNAL" && unique.rejected.length > 0) {
-    prompt = buildDuplicateRepairPrompt(basePrompt, unique.rejected.length);
-    result = await generateAdminQuestionsWithPrompt(input, generationPlan, prompt);
-    unique = await filterUniqueQuestions(result.questions);
-  }
+  const batched = input.provider === "INTERNAL" || input.promptOverride?.trim()
+    ? await generateSingleAdminCandidateBatch(input, generationPlan, basePrompt)
+    : await generateBatchedAdminCandidates(input, generationPlan);
 
   return {
     generationPlan,
-    prompt,
-    questions: unique.evaluated.map((candidate) => ({
+    prompt: batched.prompt,
+    questions: batched.unique.evaluated.map((candidate) => ({
       ...candidate.question,
       id: uid("q_candidate"),
       uniqueness: candidate.uniqueness
     })),
-    generationMeta: { ...result.meta, duplicateRejectedCount: unique.rejected.length, duplicateRejections: unique.rejected },
+    generationMeta: { ...batched.meta, duplicateRejectedCount: batched.unique.rejected.length, duplicateRejections: batched.unique.rejected },
     llmQuota: llmQuotaSnapshot(),
     stats: await questionBankStatsLive()
+  };
+}
+
+async function generateSingleAdminCandidateBatch(input: QuestionGenerationInput & { promptOverride?: string }, generationPlan: QuestionGenerationPlanItem[], basePrompt: string) {
+  let prompt = basePrompt;
+  let result = input.promptOverride?.trim()
+    ? await generateAdminQuestionCandidatesWithPrompt(input, generationPlan, input.promptOverride.trim())
+    : await generateAdminQuestionCandidatesOnly(input, generationPlan);
+  let unique = await filterUniqueQuestions(result.questions);
+  if (input.provider !== "INTERNAL" && unique.rejected.length > 0) {
+    prompt = buildDuplicateRepairPrompt(basePrompt, unique.rejected.length);
+    result = await generateAdminQuestionCandidatesWithPrompt(input, generationPlan, prompt);
+    unique = await filterUniqueQuestions(result.questions);
+  }
+  return { prompt, meta: result.meta, unique };
+}
+
+async function generateBatchedAdminCandidates(input: QuestionGenerationInput, generationPlan: QuestionGenerationPlanItem[]) {
+  const batchSize = 10;
+  const batches = splitGenerationPlanIntoBatches(generationPlan, batchSize);
+  const questions: Question[] = [];
+  const batchMeta: NonNullable<LlmGenerationMeta["batches"]> = [];
+  let meta: LlmGenerationMeta | null = null;
+
+  for (const [index, batchPlan] of batches.entries()) {
+    const batchCount = batchPlan.reduce((sum, item) => sum + item.count, 0);
+    const batchInput: QuestionGenerationInput = { ...input, count: batchCount };
+    const result = await generateAdminQuestionCandidatesOnly(batchInput, batchPlan);
+    const evaluatedBatch = await filterUniqueQuestions([...questions, ...result.questions], { includeVector: true });
+    const uniqueNewQuestions = evaluatedBatch.evaluated.slice(questions.length).filter((item) => item.uniqueness.isUnique).map((item) => item.question);
+    questions.push(...uniqueNewQuestions);
+    meta = mergeGenerationMeta(meta, result.meta, input.count);
+    batchMeta.push({
+      index: index + 1,
+      requestedCount: batchCount,
+      returnedCount: result.questions.length,
+      uniqueCount: uniqueNewQuestions.length,
+      duplicateCount: Math.max(0, result.questions.length - uniqueNewQuestions.length),
+      provider: result.meta.actualProvider
+    });
+
+    if (questions.length >= input.count) break;
+    if (result.questions.length === 0) break;
+  }
+
+  const unique = await filterUniqueQuestions(questions.slice(0, input.count));
+  return {
+    prompt: buildLlmQuestionPrompt(input, generationPlan),
+    meta: {
+      ...(meta ?? {
+        requestedProvider: input.provider,
+        actualProvider: "INTERNAL" as const,
+        source: "INTERNAL_FALLBACK" as const,
+        requestedCount: input.count,
+        llmReturnedCount: 0,
+        fallbackCount: 0
+      }),
+      requestedCount: input.count,
+      batches: batchMeta
+    },
+    unique
+  };
+}
+
+function splitGenerationPlanIntoBatches(generationPlan: QuestionGenerationPlanItem[], batchSize: number) {
+  const batches: QuestionGenerationPlanItem[][] = [];
+  let mixedSmallBatch: QuestionGenerationPlanItem[] = [];
+  let mixedSmallBatchCount = 0;
+
+  function flushMixedSmallBatch() {
+    if (!mixedSmallBatch.length) return;
+    batches.push(mixedSmallBatch);
+    mixedSmallBatch = [];
+    mixedSmallBatchCount = 0;
+  }
+
+  for (const item of generationPlan) {
+    if (item.count < batchSize) {
+      if (mixedSmallBatchCount + item.count > batchSize) flushMixedSmallBatch();
+      mixedSmallBatch.push(item);
+      mixedSmallBatchCount += item.count;
+      if (mixedSmallBatchCount === batchSize) flushMixedSmallBatch();
+      continue;
+    }
+
+    flushMixedSmallBatch();
+    let remaining = item.count;
+    while (remaining > 0) {
+      const count = Math.min(batchSize, remaining);
+      batches.push([{ ...item, count }]);
+      remaining -= count;
+    }
+  }
+  flushMixedSmallBatch();
+  return batches;
+}
+
+function mergeGenerationMeta(current: LlmGenerationMeta | null, next: LlmGenerationMeta, requestedCount: number): LlmGenerationMeta {
+  if (!current) return { ...next, requestedCount };
+  return {
+    ...next,
+    requestedProvider: current.requestedProvider,
+    actualProvider: next.actualProvider,
+    source: next.source === "LLM" || current.source === "LLM" ? "LLM" : "INTERNAL_FALLBACK",
+    requestedCount,
+    llmReturnedCount: current.llmReturnedCount + next.llmReturnedCount,
+    fallbackCount: current.fallbackCount + next.fallbackCount,
+    groq: next.groq ?? current.groq,
+    gemini: next.gemini ?? current.gemini
+  };
+}
+
+async function generateAdminQuestionCandidatesOnly(input: QuestionGenerationInput, generationPlan: QuestionGenerationPlanItem[]): Promise<GeneratedQuestionResult> {
+  if (input.provider === "INTERNAL") {
+    const fallback = buildFallbackAdminQuestions(input, generationPlan, input.count, 0);
+    return {
+      questions: fallback,
+      meta: {
+        requestedProvider: input.provider,
+        actualProvider: "INTERNAL",
+        source: "INTERNAL_FALLBACK",
+        requestedCount: input.count,
+        llmReturnedCount: 0,
+        fallbackCount: fallback.length
+      }
+    };
+  }
+
+  const response = await callQuestionGenerationLlm(input.provider, buildLlmQuestionPrompt(input, generationPlan));
+  const parsed = response?.text ? parseGeneratedQuestions(input, response.text) : null;
+  return {
+    questions: (parsed ?? []).slice(0, input.count),
+    meta: {
+      ...(response?.meta ?? {
+        requestedProvider: input.provider,
+        actualProvider: "INTERNAL" as const,
+        source: "INTERNAL_FALLBACK" as const,
+        requestedCount: 0,
+        llmReturnedCount: 0,
+        fallbackCount: 0
+      }),
+      requestedCount: input.count,
+      llmReturnedCount: parsed?.length ?? 0,
+      fallbackCount: 0
+    }
+  };
+}
+
+async function generateAdminQuestionCandidatesWithPrompt(
+  input: QuestionGenerationInput,
+  generationPlan: QuestionGenerationPlanItem[],
+  prompt: string
+): Promise<GeneratedQuestionResult> {
+  if (input.provider === "INTERNAL") return generateAdminQuestionCandidatesOnly(input, generationPlan);
+
+  const response = await callQuestionGenerationLlm(input.provider, prompt);
+  const parsed = response?.text ? parseGeneratedQuestions(input, response.text) : null;
+  return {
+    questions: (parsed ?? []).slice(0, input.count),
+    meta: {
+      ...(response?.meta ?? {
+        requestedProvider: input.provider,
+        actualProvider: "INTERNAL" as const,
+        source: "INTERNAL_FALLBACK" as const,
+        requestedCount: 0,
+        llmReturnedCount: 0,
+        fallbackCount: 0
+      }),
+      requestedCount: input.count,
+      llmReturnedCount: parsed?.length ?? 0,
+      fallbackCount: 0
+    }
   };
 }
 
@@ -332,33 +496,6 @@ function buildFallbackAdminQuestions(
       estimatedSeconds: difficulty === "EASY" ? 45 : difficulty === "MEDIUM" ? 60 : 75
     };
   });
-}
-
-async function generateAdminQuestionsWithPrompt(
-  input: QuestionGenerationInput,
-  generationPlan: QuestionGenerationPlanItem[],
-  prompt: string
-): Promise<GeneratedQuestionResult> {
-  const response = input.provider === "INTERNAL" ? null : await callQuestionGenerationLlm(input.provider, prompt);
-  if (response?.text) {
-    const parsed = parseGeneratedQuestions(input, response.text);
-    if (parsed?.length) {
-      const trimmed = parsed.slice(0, input.count);
-      if (trimmed.length >= input.count) {
-        return {
-          questions: trimmed,
-          meta: { ...response.meta, requestedCount: input.count, llmReturnedCount: parsed.length, fallbackCount: 0 }
-        };
-      }
-      const fallback = buildFallbackAdminQuestions(input, generationPlan, input.count, trimmed.length);
-      const fallbackTopUp = fallback.slice(0, input.count - trimmed.length);
-      return {
-        questions: [...trimmed, ...fallbackTopUp],
-        meta: { ...response.meta, requestedCount: input.count, llmReturnedCount: parsed.length, fallbackCount: fallbackTopUp.length }
-      };
-    }
-  }
-  return generateAdminQuestions({ ...input, provider: "INTERNAL" }, generationPlan);
 }
 
 async function generateQuestionsWithConfiguredLlm(input: QuestionGenerationInput, generationPlan: QuestionGenerationPlanItem[]) {
