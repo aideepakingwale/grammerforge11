@@ -206,6 +206,28 @@ export type QuestionBankStats = {
   llmGenerated: number;
 };
 
+export type QuestionBankBrowserResult = {
+  filters: {
+    subject?: Subject;
+    topic?: string;
+    microTopic?: string;
+  };
+  total: number;
+  source: "database" | "starter_bank";
+  topics: Array<{
+    subjectType: Subject;
+    topic: string;
+    count: number;
+  }>;
+  microTopics: Array<{
+    subjectType: Subject;
+    topic: string;
+    microTopic: string;
+    count: number;
+  }>;
+  questions: Question[];
+};
+
 export type QuestionPayload = {
   mode: "text" | "svg";
   content: string;

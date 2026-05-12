@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Activity, BarChart3, BookOpen, CheckCircle2, CreditCard, DatabaseZap, FileText, KeyRound, Mail, Server, Sparkles, Users, Wand2, WalletCards } from "lucide-react";
+import { Activity, BarChart3, BookCheck, BookOpen, CheckCircle2, CreditCard, DatabaseZap, FileText, GraduationCap, KeyRound, Mail, School, Server, ShieldCheck, Sparkles, UserRoundCheck, Users, Wand2, WalletCards } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { UsersPanel } from "@/frontend/features/admin/panels/users-panel";
 import { ConfigPanel } from "@/frontend/features/admin/panels/config-panel";
@@ -85,13 +85,15 @@ export function AdminDashboard() {
     await load();
   }
 
-  const stats = useMemo<Array<[string, string | number, LucideIcon]>>(() => {
+  const stats = useMemo<Array<[string, string | number, LucideIcon, string]>>(() => {
     if (!data) return [];
     return [
-      ["Users", data.analytics.totalUsers, Users],
-      ["Active subscriptions", data.analytics.activeSubscriptions, CreditCard],
-      ["Exams completed", data.analytics.examsCompleted, BookOpen],
-      ["Average score", `${data.analytics.averageScore}%`, Activity]
+      ["Students", data.analytics.students, GraduationCap, "Learner accounts"],
+      ["Parents", data.analytics.parents, UserRoundCheck, "Guardian accounts"],
+      ["Admins", data.analytics.admins, ShieldCheck, "Operator accounts"],
+      ["Exams", data.analytics.examsCompleted, BookCheck, `${data.analytics.examsStarted} started`],
+      ["Questions", data.analytics.questionBankSize, BookOpen, "Master bank size"],
+      ["Subscriptions", data.analytics.activeSubscriptions, CreditCard, "Paid or upgraded"]
     ];
   }, [data]);
 
@@ -137,13 +139,14 @@ export function AdminDashboard() {
           </div>
         </header>
 
-        <div className="mt-4 grid gap-3 md:grid-cols-4">
-          {stats.map(([label, value, Icon]) => (
+        <div className="mt-4 grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+          {stats.map(([label, value, Icon, sub]) => (
             <div key={label as string} className="stat-card p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-sm font-bold text-ink/55">{label as string}</p>
                   <p className="mt-2 text-2xl font-black tracking-tight">{value as string}</p>
+                  <p className="mt-1 text-xs font-semibold text-ink/40">{sub}</p>
                 </div>
                 <span className="rounded-md bg-skysoft p-2 text-teal">
                   <Icon size={20} />
@@ -151,6 +154,25 @@ export function AdminDashboard() {
               </div>
             </div>
           ))}
+        </div>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <div className="rounded-lg border border-line bg-white/90 p-4 shadow-soft">
+            <div className="flex items-center gap-2"><School className="text-teal" size={20} /><h2 className="font-black">Learning activity</h2></div>
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              <MetricTile label="Started" value={data.analytics.examsStarted} icon={BookOpen} />
+              <MetricTile label="Completed" value={data.analytics.examsCompleted} icon={BookCheck} />
+              <MetricTile label="Avg score" value={`${data.analytics.averageScore}%`} icon={BarChart3} />
+            </div>
+          </div>
+          <div className="rounded-lg border border-line bg-white/90 p-4 shadow-soft">
+            <div className="flex items-center gap-2"><Activity className="text-teal" size={20} /><h2 className="font-black">Platform signals</h2></div>
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              <MetricTile label="Audit events" value={data.analytics.auditEvents} icon={ShieldCheck} />
+              <MetricTile label="AI insights" value={data.analytics.aiInsightsCached} icon={Sparkles} />
+              <MetricTile label="Questions" value={data.analytics.questionBankSize} icon={BookOpen} />
+            </div>
+          </div>
         </div>
 
         <div className="mt-4 grid gap-3 md:grid-cols-3 lg:grid-cols-6">
@@ -188,5 +210,15 @@ export function AdminDashboard() {
         </section>
       </section>
     </main>
+  );
+}
+
+function MetricTile({ label, value, icon: Icon }: { label: string; value: string | number; icon: LucideIcon }) {
+  return (
+    <div className="rounded-md bg-paper p-3">
+      <Icon className="text-teal" size={17} />
+      <p className="mt-2 text-lg font-black">{value}</p>
+      <p className="text-xs font-bold text-ink/45">{label}</p>
+    </div>
   );
 }

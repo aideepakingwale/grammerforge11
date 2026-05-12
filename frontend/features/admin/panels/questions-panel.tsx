@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
-import { BookOpen, CalendarClock, Save, Wand2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { BookOpen, CalendarClock, Database, Save, Wand2 } from "lucide-react";
 import { Button } from "@/frontend/shared/ui/button";
 import { syllabusRegistry } from "@/backend/syllabus/registry";
 import type {
   Difficulty,
   LlmGenerationMeta,
   PlatformConfig,
+  QuestionBankBrowserResult,
   QuestionBankStats,
   QuestionCandidate,
   QuestionGenerationJob,
@@ -184,6 +185,7 @@ export function QuestionsPanel({ initial, mutate }: Props) {
           />
         )}
         <QuestionBankStatus stats={stats} schedule={schedule} llmQuota={llmQuota} />
+        <QuestionBankBrowser />
         <GenerationJobs jobs={jobs} />
       </div>
     </div>
@@ -372,6 +374,71 @@ function QuestionBankStatus({ stats, schedule, llmQuota }: { stats?: QuestionBan
 
 function Metric({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
   return <div className="rounded-md bg-paper p-3"><p className="text-2xl font-black">{value}</p><p className="text-sm font-bold text-ink/55">{label}</p>{sub && <p className="text-xs font-semibold text-ink/45">{sub}</p>}</div>;
+}
+
+function QuestionBankBrowser() {
+  const [subject, setSubject] = useState<Subject>("MATHS");
+  const [topic, setTopic] = useState("");
+  const [microTopic, setMicroTopic] = useState("");
+  const [data, setData] = useState<QuestionBankBrowserResult | null>(null);
+  const topicOptions = data?.topics.filter((item) => item.subjectType === subject) ?? [];
+  const microTopicOptions = data?.microTopics.filter((item) => item.subjectType === subject && (!topic || item.topic === topic)) ?? [];
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const params = new URLSearchParams({ subject, limit: "30" });
+    if (topic) params.set("topic", topic);
+    if (microTopic) params.set("microTopic", microTopic);
+    fetch(`/api/admin/questions/bank?${params.toString()}`, { cache: "no-store", signal: controller.signal })
+      .then((response) => response.json())
+      .then((payload: QuestionBankBrowserResult) => setData(payload))
+      .catch(() => {
+        if (!controller.signal.aborted) setData(null);
+      });
+    return () => controller.abort();
+  }, [subject, topic, microTopic]);
+
+  return (
+    <div className="premium-card p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2"><Database className="text-teal" size={22} /><h2 className="text-xl font-black">Question bank browser</h2></div>
+          <p className="mt-1 text-sm font-semibold text-ink/55">{data?.total ?? 0} matching question(s) from {data?.source === "database" ? "master question bank" : "starter bank"}.</p>
+        </div>
+        {!data && <span className="chip">Loading</span>}
+      </div>
+      <div className="mt-4 grid gap-2 md:grid-cols-3">
+        <select className="field" value={subject} onChange={(event) => { setSubject(event.target.value as Subject); setTopic(""); setMicroTopic(""); }}>
+          <option value="MATHS">Maths</option><option value="ENGLISH">English</option><option value="VERBAL_REASONING">Verbal Reasoning</option><option value="NON_VERBAL_REASONING">Non-Verbal Reasoning</option>
+        </select>
+        <select className="field" value={topic} onChange={(event) => { setTopic(event.target.value); setMicroTopic(""); }}>
+          <option value="">All topics</option>
+          {topicOptions.map((item) => <option key={item.topic} value={item.topic}>{item.topic} ({item.count})</option>)}
+        </select>
+        <select className="field" value={microTopic} onChange={(event) => setMicroTopic(event.target.value)}>
+          <option value="">All subtopics</option>
+          {microTopicOptions.map((item) => <option key={item.microTopic} value={item.microTopic}>{item.microTopic} ({item.count})</option>)}
+        </select>
+      </div>
+      <div className="mt-4 space-y-3">
+        {data?.questions.length === 0 && <p className="rounded-md bg-paper p-3 text-sm font-semibold text-ink/55">No questions found for this filter.</p>}
+        {data?.questions.map((question) => (
+          <div key={question.id} className="rounded-md border border-ink/10 bg-white p-3">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <p className="text-sm font-black">{question.topic} / {question.microTopic}</p>
+                <p className="mt-1 text-xs font-bold text-ink/45">{formatEnumLabel(question.subjectType)} · {formatEnumLabel(question.questionType)} · {formatEnumLabel(question.difficultyLevel)}</p>
+              </div>
+              <span className="chip">{question.id.slice(0, 8)}</span>
+            </div>
+            {question.stimulus && <div className="mt-3 rounded-md bg-paper p-3"><p className="text-xs font-black uppercase text-ink/45">{question.stimulus.title}</p><QuestionVisual payload={question.stimulus} /></div>}
+            <div className="mt-3 text-sm font-semibold"><QuestionVisual payload={question.questionData} /></div>
+            {question.options.length > 0 && <div className="mt-3 grid gap-2 md:grid-cols-2">{question.options.map((option, index) => <div key={`${question.id}-${index}`} className="rounded-md bg-paper p-2 text-xs font-bold"><span className="text-ink/45">Option {String.fromCharCode(65 + index)}:</span> <QuestionVisual payload={option} /></div>)}</div>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function GenerationJobs({ jobs }: { jobs: QuestionGenerationJob[] }) {

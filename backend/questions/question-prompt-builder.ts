@@ -23,6 +23,8 @@ export function buildLlmQuestionPrompt(input: QuestionGenerationInput, generatio
     `Coverage total check: ${planTotal}.`,
     "Output: {\"questions\":[{questionType,difficultyLevel,topic,syllabusTopicSlug,microTopic,instruction,stimulus,questionData,options,answer,explanation,skillTags,estimatedSeconds,marksAvailable,scoringWeight}]}",
     "Payload: {mode:\"text\"|\"svg\"|\"passage\"|\"table\",title?,content,caption?}. MCQ: exactly 4 plausible options and answer must equal correct option content. SHORT_ANSWER: options=[].",
+    "Answer validation: solve each question independently before returning it. For negative wording such as NOT/except/least, verify the chosen answer satisfies the negative condition. Explanations must prove the answer, not merely repeat it.",
+    "Reject internally and replace any item where the answer is mathematically or logically false. Example: if asking NOT a multiple of 3, never choose 6, 9, 12, or 15 because all are multiples of 3.",
     "Uniqueness: zero duplicate or near-duplicate items in this response. Silently audit before returning. Do not reuse numbers, names, passage premise, answer pattern, option set, distractors, SVG geometry, or explanation structure.",
     subjectRule,
     "English comprehension must include passage in stimulus. NVR must use clean SVG for visual stimuli/options.",
