@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Activity, BarChart3, BookCheck, BookOpen, CheckCircle2, CreditCard, DatabaseZap, FileText, GraduationCap, KeyRound, Mail, School, Server, ShieldCheck, Sparkles, UserRoundCheck, Users, Wand2, WalletCards } from "lucide-react";
+import { Activity, AlertCircle, BarChart3, BookCheck, BookOpen, CheckCircle2, CreditCard, DatabaseZap, FileText, GraduationCap, KeyRound, Mail, School, Server, ShieldCheck, Sparkles, UserRoundCheck, Users, Wand2, WalletCards, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { UsersPanel } from "@/frontend/features/admin/panels/users-panel";
 import { ConfigPanel } from "@/frontend/features/admin/panels/config-panel";
@@ -50,6 +50,7 @@ export function AdminDashboard() {
   const [data, setData] = useState<AdminData | null>(null);
   const [active, setActive] = useState<(typeof tabs)[number][0]>("users");
   const [notice, setNotice] = useState("");
+  const [noticeType, setNoticeType] = useState<"success" | "error" | "info">("info");
 
   async function load(signal?: AbortSignal) {
     const response = await fetch("/api/admin/dashboard", { cache: "no-store", signal });
@@ -67,10 +68,19 @@ export function AdminDashboard() {
       })
       .then((payload) => setData(payload))
       .catch(() => {
-        if (!controller.signal.aborted) setNotice("Could not load admin dashboard");
+        if (!controller.signal.aborted) {
+          setNoticeType("error");
+          setNotice("Could not load admin dashboard");
+        }
       });
     return () => controller.abort();
   }, []);
+
+  useEffect(() => {
+    if (!notice) return;
+    const timeout = window.setTimeout(() => setNotice(""), 10000);
+    return () => window.clearTimeout(timeout);
+  }, [notice]);
 
   async function mutate(url: string, options: RequestInit, success: string) {
     setNotice("");
@@ -80,9 +90,11 @@ export function AdminDashboard() {
     });
     const json = await response.json().catch(() => ({}));
     if (!response.ok) {
+      setNoticeType("error");
       setNotice(json.error ?? "Admin action failed");
       return;
     }
+    setNoticeType("success");
     setNotice(success);
     await load();
   }
@@ -119,6 +131,7 @@ export function AdminDashboard() {
 
   return (
     <main className="min-h-screen bg-paper px-4 py-5 text-ink">
+      {notice && <AdminToast message={notice} type={noticeType} onClose={() => setNotice("")} />}
       <section className="mx-auto max-w-7xl">
         <header className="page-header p-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
@@ -200,8 +213,6 @@ export function AdminDashboard() {
           ))}
         </nav>
 
-        {notice && <p className="mt-4 rounded-md border border-gold/30 bg-gold/10 p-3 text-sm font-bold text-ink">{notice}</p>}
-
         <section className="mt-4">
           {active === "users" && <UsersPanel users={data.users} mutate={mutate} />}
           {active === "config" && <ConfigPanel config={data.config} mutate={mutate} />}
@@ -213,6 +224,24 @@ export function AdminDashboard() {
         </section>
       </section>
     </main>
+  );
+}
+
+function AdminToast({ message, type, onClose }: { message: string; type: "success" | "error" | "info"; onClose: () => void }) {
+  const Icon = type === "error" ? AlertCircle : CheckCircle2;
+  const tone = type === "error"
+    ? "border-coral/30 bg-white text-coral"
+    : type === "success"
+      ? "border-moss/25 bg-white text-moss"
+      : "border-teal/25 bg-white text-teal";
+  return (
+    <div className={`fixed right-4 top-4 z-50 flex max-w-md items-start gap-3 rounded-lg border p-4 shadow-[0_18px_48px_rgba(23,32,51,0.18)] ${tone}`} role="status" aria-live="polite">
+      <Icon className="mt-0.5 shrink-0" size={20} />
+      <p className="min-w-0 flex-1 text-sm font-bold leading-5 text-ink">{message}</p>
+      <button type="button" className="rounded-md p-1 text-ink/45 transition hover:bg-ink/5 hover:text-ink" onClick={onClose} aria-label="Dismiss notification">
+        <X size={17} />
+      </button>
+    </div>
   );
 }
 
