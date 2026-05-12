@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { createPortal } from "react-dom";
 import { Activity, AlertCircle, BarChart3, BookCheck, BookOpen, CheckCircle2, CreditCard, DatabaseZap, FileText, GraduationCap, KeyRound, Mail, School, Server, ShieldCheck, Sparkles, UserRoundCheck, Users, Wand2, WalletCards, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { UsersPanel } from "@/frontend/features/admin/panels/users-panel";
@@ -229,19 +230,62 @@ export function AdminDashboard() {
 
 function AdminToast({ message, type, onClose }: { message: string; type: "success" | "error" | "info"; onClose: () => void }) {
   const Icon = type === "error" ? AlertCircle : CheckCircle2;
-  const tone = type === "error"
-    ? "border-coral/30 bg-white text-coral"
-    : type === "success"
-      ? "border-moss/25 bg-white text-moss"
-      : "border-teal/25 bg-white text-teal";
-  return (
-    <div className={`fixed right-4 top-4 z-50 flex max-w-md items-start gap-3 rounded-lg border p-4 shadow-[0_18px_48px_rgba(23,32,51,0.18)] ${tone}`} role="status" aria-live="polite">
-      <Icon className="mt-0.5 shrink-0" size={20} />
-      <p className="min-w-0 flex-1 text-sm font-bold leading-5 text-ink">{message}</p>
-      <button type="button" className="rounded-md p-1 text-ink/45 transition hover:bg-ink/5 hover:text-ink" onClick={onClose} aria-label="Dismiss notification">
-        <X size={17} />
-      </button>
-    </div>
+  const tone = {
+    error: {
+      title: "Action failed",
+      border: "border-coral/25",
+      icon: "bg-coral/10 text-coral",
+      bar: "bg-coral",
+      ring: "shadow-[0_18px_55px_rgba(239,68,68,0.18)]"
+    },
+    success: {
+      title: "Saved successfully",
+      border: "border-moss/25",
+      icon: "bg-moss/10 text-moss",
+      bar: "bg-moss",
+      ring: "shadow-[0_18px_55px_rgba(47,179,68,0.18)]"
+    },
+    info: {
+      title: "Update",
+      border: "border-teal/25",
+      icon: "bg-teal/10 text-teal",
+      bar: "bg-teal",
+      ring: "shadow-[0_18px_55px_rgba(37,99,235,0.16)]"
+    }
+  }[type];
+
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
+    <div className="pointer-events-none fixed inset-x-3 bottom-4 z-[9999] flex justify-center sm:inset-x-auto sm:right-5 sm:bottom-5 sm:justify-end">
+      <div
+        className={`pointer-events-auto w-full max-w-md overflow-hidden rounded-xl border bg-white/95 text-ink backdrop-blur-md ${tone.border} ${tone.ring}`}
+        role={type === "error" ? "alert" : "status"}
+        aria-live={type === "error" ? "assertive" : "polite"}
+      >
+        <div className="flex items-start gap-3 p-4">
+          <span className={`mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-lg ${tone.icon}`}>
+            <Icon size={19} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-black leading-5">{tone.title}</p>
+            <p className="mt-1 text-sm font-semibold leading-5 text-ink/68">{message}</p>
+          </div>
+          <button
+            type="button"
+            className="rounded-lg p-2 text-ink/45 transition hover:bg-ink/5 hover:text-ink focus:outline-none focus:ring-2 focus:ring-teal/25"
+            onClick={onClose}
+            aria-label="Dismiss notification"
+          >
+            <X size={17} />
+          </button>
+        </div>
+        <div className="h-1 bg-paper">
+          <div className={`toast-progress h-full ${tone.bar}`} />
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 }
 
