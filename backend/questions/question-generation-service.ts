@@ -181,6 +181,7 @@ export async function generateQuestionCandidates(input: QuestionGenerationInput 
   const batched = input.provider === "INTERNAL" || input.promptOverride?.trim()
     ? await generateSingleAdminCandidateBatch(input, generationPlan, basePrompt)
     : await generateBatchedAdminCandidates(input, generationPlan);
+  const rejectionSummary = summarizeCandidateRejections(batched.unique.rejected);
 
   return {
     generationPlan,
@@ -190,10 +191,33 @@ export async function generateQuestionCandidates(input: QuestionGenerationInput 
       id: uid("q_candidate"),
       uniqueness: candidate.uniqueness
     })),
-    generationMeta: { ...batched.meta, duplicateRejectedCount: batched.unique.rejected.length, duplicateRejections: batched.unique.rejected },
+    generationMeta: {
+      ...batched.meta,
+      rejectedCandidateCount: batched.unique.rejected.length,
+      duplicateRejectedCount: rejectionSummary.duplicates.length,
+      qualityRejectedCount: rejectionSummary.quality.length,
+      duplicateRejections: rejectionSummary.duplicates,
+      qualityRejections: rejectionSummary.quality
+    },
     llmQuota: llmQuotaSnapshot(),
     stats: await questionBankStatsLive()
   };
+}
+
+function summarizeCandidateRejections(rejected: Array<{ questionId: string; reason: string; topic?: string; microTopic: string }>) {
+  const duplicates = rejected.filter((item) => isDuplicateRejectionReason(item.reason));
+  return {
+    duplicates,
+    quality: rejected.filter((item) => !isDuplicateRejectionReason(item.reason))
+  };
+}
+
+function isDuplicateRejectionReason(reason: string) {
+  const normalized = reason.toLowerCase();
+  return normalized.includes("duplicate") ||
+    normalized.includes("already exists") ||
+    normalized.includes("near-duplicate") ||
+    normalized.includes("similar");
 }
 
 async function generateSingleAdminCandidateBatch(input: QuestionGenerationInput & { promptOverride?: string }, generationPlan: QuestionGenerationPlanItem[], basePrompt: string) {

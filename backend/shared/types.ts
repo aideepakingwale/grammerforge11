@@ -83,7 +83,15 @@ export type LlmGenerationMeta = {
     attempts?: number;
   }>;
   duplicateRejectedCount?: number;
+  qualityRejectedCount?: number;
+  rejectedCandidateCount?: number;
   duplicateRejections?: Array<{
+    questionId: string;
+    reason: string;
+    topic?: string;
+    microTopic: string;
+  }>;
+  qualityRejections?: Array<{
     questionId: string;
     reason: string;
     topic?: string;

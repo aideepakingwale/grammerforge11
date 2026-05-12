@@ -344,9 +344,31 @@ function GenerationMetaPanel({ meta }: { meta: LlmGenerationMeta }) {
       <div><p className="text-xs font-black uppercase text-teal">Questions</p><p className="mt-1 font-black">{meta.requestedCount} requested</p><p className="text-xs font-semibold text-ink/55">{meta.llmReturnedCount} LLM, {meta.fallbackCount} fallback</p></div>
       {meta.groq && <><div><p className="text-xs font-black uppercase text-teal">Groq requests</p><p className="mt-1 font-black">{meta.groq.remainingRequests ?? "-"} remaining</p><p className="text-xs font-semibold text-ink/55">limit {meta.groq.limitRequests ?? "-"}, reset {meta.groq.resetRequests ?? "-"}</p></div><div><p className="text-xs font-black uppercase text-teal">Groq tokens</p><p className="mt-1 font-black">{meta.groq.remainingTokens ?? "-"} remaining</p><p className="text-xs font-semibold text-ink/55">limit {meta.groq.limitTokens ?? "-"}, reset {meta.groq.resetTokens ?? "-"}</p></div></>}
       {meta.gemini && <><div><p className="text-xs font-black uppercase text-teal">Gemini tokens</p><p className="mt-1 font-black">{meta.gemini.totalTokenCount ?? "-"} used</p><p className="text-xs font-semibold text-ink/55">prompt {meta.gemini.promptTokenCount ?? "-"}, answer {meta.gemini.candidatesTokenCount ?? "-"}</p></div><div><p className="text-xs font-black uppercase text-teal">Gemini quota</p><p className="mt-1 font-black">Tracked app-side</p><p className="text-xs font-semibold text-ink/55">Exact remaining quota is checked in Google AI Studio.</p></div></>}
-      {Boolean(meta.batches?.length) && <div className="md:col-span-4 rounded-md border border-teal/20 bg-white p-3"><p className="text-sm font-black text-ink">Batch generation</p><div className="mt-2 grid gap-2 md:grid-cols-5">{meta.batches?.map((batch) => <div key={batch.index} className="rounded-md bg-paper p-2 text-xs font-bold text-ink/65">Batch {batch.index}: {batch.uniqueCount}/{batch.requestedCount} unique <span className="block text-ink/45">{batch.returnedCount} returned, {batch.duplicateCount} duplicate, {batch.attempts ?? 1} attempt(s)</span></div>)}</div></div>}
+      {Boolean(meta.batches?.length) && <div className="md:col-span-4 rounded-md border border-teal/20 bg-white p-3"><p className="text-sm font-black text-ink">Batch generation</p><div className="mt-2 grid gap-2 md:grid-cols-5">{meta.batches?.map((batch) => <div key={batch.index} className="rounded-md bg-paper p-2 text-xs font-bold text-ink/65">Batch {batch.index}: {batch.uniqueCount}/{batch.requestedCount} import-ready <span className="block text-ink/45">{batch.returnedCount} returned, {batch.duplicateCount} blocked, {batch.attempts ?? 1} attempt(s)</span></div>)}</div></div>}
       {meta.llmReturnedCount < meta.requestedCount && meta.source === "LLM" && <div className="md:col-span-4 rounded-md border border-gold/30 bg-gold/10 p-3"><p className="text-sm font-black text-ink">LLM returned {meta.llmReturnedCount} of {meta.requestedCount} requested questions.</p><p className="mt-1 text-xs font-semibold text-ink/60">No fallback placeholders were added for admin import. Generate a smaller batch or retry after quota reset.</p></div>}
-      {Boolean(meta.duplicateRejectedCount) && <div className="md:col-span-4 rounded-md border border-coral/20 bg-coral/10 p-3"><p className="text-sm font-black text-coral">{meta.duplicateRejectedCount} duplicate candidate(s) removed before review.</p><p className="mt-1 text-xs font-semibold text-ink/60">The uniqueness filter checks this batch, the starter question bank, and the database question master.</p></div>}
+      {Boolean(meta.duplicateRejectedCount) && <RejectionNotice tone="duplicate" count={meta.duplicateRejectedCount ?? 0} rejections={meta.duplicateRejections ?? []} />}
+      {Boolean(meta.qualityRejectedCount) && <RejectionNotice tone="quality" count={meta.qualityRejectedCount ?? 0} rejections={meta.qualityRejections ?? []} />}
+    </div>
+  );
+}
+
+function RejectionNotice({ tone, count, rejections }: { tone: "duplicate" | "quality"; count: number; rejections: NonNullable<LlmGenerationMeta["duplicateRejections"]> }) {
+  const isDuplicate = tone === "duplicate";
+  return (
+    <div className={`md:col-span-4 rounded-md border p-3 ${isDuplicate ? "border-gold/35 bg-gold/10" : "border-coral/20 bg-coral/10"}`}>
+      <p className={`text-sm font-black ${isDuplicate ? "text-ink" : "text-coral"}`}>
+        {count} {isDuplicate ? "duplicate" : "quality"} candidate(s) locked before import.
+      </p>
+      <p className="mt-1 text-xs font-semibold text-ink/60">
+        {isDuplicate
+          ? "The uniqueness filter checks this batch, the starter question bank, the database question master, and vector similarity where available."
+          : "The quality gate blocks faulty candidates, such as MCQs without a matching answer option or invalid maths logic."}
+      </p>
+      {rejections.length > 0 && (
+        <ul className="mt-2 space-y-1 text-xs font-semibold text-ink/60">
+          {rejections.slice(0, 3).map((item) => <li key={`${item.questionId}-${item.reason}`}>{item.microTopic}: {item.reason}</li>)}
+        </ul>
+      )}
     </div>
   );
 }
