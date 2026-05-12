@@ -35,7 +35,7 @@ async function callSingleQuestionGenerationProvider(provider: LlmProvider, promp
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.45, responseMimeType: "application/json" }
+          generationConfig: { temperature: 0.62, topP: 0.9, responseMimeType: "application/json" }
         })
       }
     );
@@ -70,7 +70,8 @@ async function callSingleQuestionGenerationProvider(provider: LlmProvider, promp
       body: JSON.stringify({
         model: "llama-3.1-8b-instant",
         messages: [{ role: "user", content: prompt }],
-        temperature: 0.35,
+        temperature: 0.58,
+        top_p: 0.9,
         response_format: { type: "json_object" }
       })
     });

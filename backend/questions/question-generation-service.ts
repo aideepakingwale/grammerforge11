@@ -177,14 +177,22 @@ export function previewQuestionGeneration(input: QuestionGenerationInput) {
 
 export async function generateQuestionCandidates(input: QuestionGenerationInput & { promptOverride?: string }) {
   const generationPlan = buildQuestionGenerationPlan(input);
-  const result = input.promptOverride?.trim()
+  const basePrompt = input.promptOverride?.trim() || buildLlmQuestionPrompt(input, generationPlan);
+  let prompt = basePrompt;
+  let result = input.promptOverride?.trim()
     ? await generateAdminQuestionsWithPrompt(input, generationPlan, input.promptOverride.trim())
     : await generateAdminQuestions(input, generationPlan);
 
-  const unique = await filterUniqueQuestions(result.questions);
+  let unique = await filterUniqueQuestions(result.questions);
+  if (input.provider !== "INTERNAL" && unique.rejected.length > 0) {
+    prompt = buildDuplicateRepairPrompt(basePrompt, unique.rejected.length);
+    result = await generateAdminQuestionsWithPrompt(input, generationPlan, prompt);
+    unique = await filterUniqueQuestions(result.questions);
+  }
+
   return {
     generationPlan,
-    prompt: input.promptOverride?.trim() || buildLlmQuestionPrompt(input, generationPlan),
+    prompt,
     questions: unique.evaluated.map((candidate) => ({
       ...candidate.question,
       id: uid("q_candidate"),
@@ -194,6 +202,17 @@ export async function generateQuestionCandidates(input: QuestionGenerationInput 
     llmQuota: llmQuotaSnapshot(),
     stats: await questionBankStatsLive()
   };
+}
+
+function buildDuplicateRepairPrompt(basePrompt: string, duplicateCount: number) {
+  return [
+    basePrompt,
+    "",
+    `The previous generation contained ${duplicateCount} duplicate or near-duplicate item(s). Regenerate the complete batch from scratch.`,
+    "Hard requirement: every question in this response must be unique from every other question in the same response.",
+    "Use different wording, values, correct answers, distractors, passages, names, SVG shapes, SVG layout, and reasoning pattern for every item.",
+    "Do a silent final duplicate audit before returning JSON. If any two items feel similar, replace one before responding."
+  ].join("\n");
 }
 
 export async function importGeneratedQuestions(questions: Question[]) {
