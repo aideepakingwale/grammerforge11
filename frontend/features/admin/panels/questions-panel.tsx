@@ -222,7 +222,7 @@ function GuidedControls(props: {
         <MultiSelect title="Subtopics from selected topics" values={props.visibleSubTopics} selected={props.selectedSubTopics} onToggle={props.onSubTopicToggle} />
         <div className="grid gap-3 md:grid-cols-2">
           <MultiSelect title="Difficulty mix" values={["EASY", "MEDIUM", "HARD", "ADVANCED"] as Difficulty[]} selected={props.selectedDifficulties} onToggle={props.onDifficultyToggle} />
-          <MultiSelect title="Question type mix" values={["MULTIPLE_CHOICE", "SHORT_ANSWER"] as QuestionType[]} selected={props.selectedQuestionTypes} onToggle={props.onQuestionTypeToggle} format={(value) => value.replaceAll("_", " ")} />
+          <MultiSelect title="Question type mix" values={["MULTIPLE_CHOICE", "SHORT_ANSWER"] as QuestionType[]} selected={props.selectedQuestionTypes} onToggle={props.onQuestionTypeToggle} format={formatEnumLabel} />
         </div>
         <div className="grid grid-cols-[1fr_110px] gap-2">
           <select className="field" value={props.provider} onChange={(event) => props.onProviderChange(event.target.value as "GEMINI" | "GROQ" | "INTERNAL")}>
@@ -312,35 +312,37 @@ function UniquenessBadge({ uniqueness }: { uniqueness?: QuestionCandidate["uniqu
 }
 
 function QuestionVisual({ payload }: { payload: { mode: string; content: string; caption?: string } }) {
-  if (payload.mode === "svg" && payload.content.trim().startsWith("<svg")) {
+  const content = String(payload.content ?? "");
+  if (payload.mode === "svg" && content.trim().startsWith("<svg")) {
     return (
       <figure>
-        <div className="option-figure rounded-md border border-ink/10 bg-white p-3" dangerouslySetInnerHTML={{ __html: payload.content }} />
+        <div className="option-figure rounded-md border border-ink/10 bg-white p-3" dangerouslySetInnerHTML={{ __html: content }} />
         {payload.caption && <figcaption className="mt-2 text-xs font-semibold text-ink/50">{payload.caption}</figcaption>}
       </figure>
     );
   }
   if (payload.mode === "table") {
-    return <pre className="overflow-x-auto whitespace-pre-wrap rounded-md border border-ink/10 bg-white p-3 text-xs leading-5">{payload.content}</pre>;
+    return <pre className="overflow-x-auto whitespace-pre-wrap rounded-md border border-ink/10 bg-white p-3 text-xs leading-5">{content}</pre>;
   }
-  return <p className="whitespace-pre-wrap text-sm leading-6">{payload.content}</p>;
+  return <p className="whitespace-pre-wrap text-sm leading-6">{content}</p>;
 }
 
 function AnswerVisual({ answer }: { answer: string }) {
-  if (answer.trim().startsWith("<svg")) {
-    return <span className="mt-2 block max-w-xs"><QuestionVisual payload={{ mode: "svg", content: answer }} /></span>;
+  const content = String(answer ?? "");
+  if (content.trim().startsWith("<svg")) {
+    return <span className="mt-2 block max-w-xs"><QuestionVisual payload={{ mode: "svg", content }} /></span>;
   }
-  return <span>{answer}</span>;
+  return <span>{content}</span>;
 }
 
 function GenerationMetaPanel({ meta }: { meta: LlmGenerationMeta }) {
   return (
     <div className="mt-4 grid gap-3 rounded-md border border-teal/20 bg-teal/10 p-3 md:grid-cols-4">
-      <div><p className="text-xs font-black uppercase text-teal">Provider</p><p className="mt-1 font-black">{meta.actualProvider}</p><p className="text-xs font-semibold text-ink/55">{meta.source.replaceAll("_", " ")}</p></div>
+      <div><p className="text-xs font-black uppercase text-teal">Provider</p><p className="mt-1 font-black">{formatEnumLabel(meta.actualProvider)}</p><p className="text-xs font-semibold text-ink/55">{formatEnumLabel(meta.source)}</p></div>
       <div><p className="text-xs font-black uppercase text-teal">Questions</p><p className="mt-1 font-black">{meta.requestedCount} requested</p><p className="text-xs font-semibold text-ink/55">{meta.llmReturnedCount} LLM, {meta.fallbackCount} fallback</p></div>
       {meta.groq && <><div><p className="text-xs font-black uppercase text-teal">Groq requests</p><p className="mt-1 font-black">{meta.groq.remainingRequests ?? "-"} remaining</p><p className="text-xs font-semibold text-ink/55">limit {meta.groq.limitRequests ?? "-"}, reset {meta.groq.resetRequests ?? "-"}</p></div><div><p className="text-xs font-black uppercase text-teal">Groq tokens</p><p className="mt-1 font-black">{meta.groq.remainingTokens ?? "-"} remaining</p><p className="text-xs font-semibold text-ink/55">limit {meta.groq.limitTokens ?? "-"}, reset {meta.groq.resetTokens ?? "-"}</p></div></>}
       {meta.gemini && <><div><p className="text-xs font-black uppercase text-teal">Gemini tokens</p><p className="mt-1 font-black">{meta.gemini.totalTokenCount ?? "-"} used</p><p className="text-xs font-semibold text-ink/55">prompt {meta.gemini.promptTokenCount ?? "-"}, answer {meta.gemini.candidatesTokenCount ?? "-"}</p></div><div><p className="text-xs font-black uppercase text-teal">Gemini quota</p><p className="mt-1 font-black">Tracked app-side</p><p className="text-xs font-semibold text-ink/55">Exact remaining quota is checked in Google AI Studio.</p></div></>}
-      {Boolean(meta.batches?.length) && <div className="md:col-span-4 rounded-md border border-teal/20 bg-white p-3"><p className="text-sm font-black text-ink">Batch generation</p><div className="mt-2 grid gap-2 md:grid-cols-5">{meta.batches?.map((batch) => <div key={batch.index} className="rounded-md bg-paper p-2 text-xs font-bold text-ink/65">Batch {batch.index}: {batch.uniqueCount}/{batch.requestedCount} unique <span className="block text-ink/45">{batch.returnedCount} returned, {batch.duplicateCount} duplicate</span></div>)}</div></div>}
+      {Boolean(meta.batches?.length) && <div className="md:col-span-4 rounded-md border border-teal/20 bg-white p-3"><p className="text-sm font-black text-ink">Batch generation</p><div className="mt-2 grid gap-2 md:grid-cols-5">{meta.batches?.map((batch) => <div key={batch.index} className="rounded-md bg-paper p-2 text-xs font-bold text-ink/65">Batch {batch.index}: {batch.uniqueCount}/{batch.requestedCount} unique <span className="block text-ink/45">{batch.returnedCount} returned, {batch.duplicateCount} duplicate, {batch.attempts ?? 1} attempt(s)</span></div>)}</div></div>}
       {meta.llmReturnedCount < meta.requestedCount && meta.source === "LLM" && <div className="md:col-span-4 rounded-md border border-gold/30 bg-gold/10 p-3"><p className="text-sm font-black text-ink">LLM returned {meta.llmReturnedCount} of {meta.requestedCount} requested questions.</p><p className="mt-1 text-xs font-semibold text-ink/60">No fallback placeholders were added for admin import. Generate a smaller batch or retry after quota reset.</p></div>}
       {Boolean(meta.duplicateRejectedCount) && <div className="md:col-span-4 rounded-md border border-coral/20 bg-coral/10 p-3"><p className="text-sm font-black text-coral">{meta.duplicateRejectedCount} duplicate candidate(s) removed before review.</p><p className="mt-1 text-xs font-semibold text-ink/60">The uniqueness filter checks this batch, the starter question bank, and the database question master.</p></div>}
     </div>
@@ -380,13 +382,17 @@ function GenerationJobs({ jobs }: { jobs: QuestionGenerationJob[] }) {
         {jobs.length === 0 && <p className="text-sm font-semibold text-ink/55">No generation jobs yet.</p>}
         {jobs.map((job) => (
           <div key={job.id} className="rounded-md border border-ink/10 bg-white p-3">
-            <div className="flex flex-wrap items-center justify-between gap-2"><p className="font-black">{job.subject.replaceAll("_", " ")} / {job.microTopic}</p><span className="chip">{job.status}</span></div>
+            <div className="flex flex-wrap items-center justify-between gap-2"><p className="font-black">{formatEnumLabel(job.subject)} / {job.microTopic}</p><span className="chip">{formatEnumLabel(job.status)}</span></div>
             <p className="mt-1 text-sm font-semibold text-ink/60">{job.generatedCount}/{job.count} generated via {job.provider} at {new Date(job.createdAt).toLocaleString()}</p>
           </div>
         ))}
       </div>
     </div>
   );
+}
+
+function formatEnumLabel(value: unknown) {
+  return String(value ?? "").replaceAll("_", " ");
 }
 
 function ScheduleForm({ schedule, mutate }: { schedule: QuestionGenerationSchedule; mutate: Mutate }) {

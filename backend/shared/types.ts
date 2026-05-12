@@ -79,6 +79,7 @@ export type LlmGenerationMeta = {
     uniqueCount: number;
     duplicateCount: number;
     provider: LlmProvider;
+    attempts?: number;
   }>;
   duplicateRejectedCount?: number;
   duplicateRejections?: Array<{

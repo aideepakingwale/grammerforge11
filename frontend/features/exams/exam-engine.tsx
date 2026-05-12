@@ -15,10 +15,11 @@ function formatTime(seconds: number) {
 }
 
 function QuestionContent({ payload, className = "" }: { payload: QuestionPayload; className?: string }) {
+  const content = String(payload.content ?? "");
   if (payload.mode === "svg") {
-    return <div className={`option-figure ${className}`} dangerouslySetInnerHTML={{ __html: payload.content }} />;
+    return <div className={`option-figure ${className}`} dangerouslySetInnerHTML={{ __html: content }} />;
   }
-  return <div className={className}>{payload.content}</div>;
+  return <div className={className}>{content}</div>;
 }
 
 function ReviewAnswer({
@@ -58,7 +59,8 @@ const externalAiPlatforms = [
 ];
 
 function payloadForPrompt(payload: QuestionPayload) {
-  return payload.mode === "svg" ? `[SVG]\n${payload.content}` : payload.content;
+  const content = String(payload.content ?? "");
+  return payload.mode === "svg" ? `[SVG]\n${content}` : content;
 }
 
 function buildExternalAiPrompt(question: Question, answer?: StudentAnswer) {
@@ -78,10 +80,10 @@ function buildExternalAiPrompt(question: Question, answer?: StudentAnswer) {
     "Explain why the student's answer is correct or incorrect, why the correct answer is correct, and why the distractor options are less suitable.",
     "Use child-friendly language but include enough detail for a parent to understand the reasoning.",
     "",
-    `Subject: ${question.subjectType.replaceAll("_", " ")}`,
+    `Subject: ${formatEnumLabel(question.subjectType)}`,
     `Micro-topic: ${question.microTopic}`,
     `Difficulty: ${question.difficultyLevel}`,
-    `Question type: ${question.questionType.replaceAll("_", " ")}`,
+    `Question type: ${formatEnumLabel(question.questionType)}`,
     "",
     stimulus,
     "",
@@ -97,6 +99,10 @@ function buildExternalAiPrompt(question: Question, answer?: StudentAnswer) {
     "",
     "Please format the answer with: 1) short verdict, 2) step-by-step reasoning, 3) visual/SVG analysis if relevant, 4) why each option is right/wrong, 5) one similar practice tip."
   ].join("\n");
+}
+
+function formatEnumLabel(value: unknown) {
+  return String(value ?? "").replaceAll("_", " ");
 }
 
 function ExternalAiPromptTools({ question, answer }: { question: Question; answer?: StudentAnswer }) {

@@ -220,7 +220,7 @@ async function generateBatchedAdminCandidates(input: QuestionGenerationInput, ge
   for (const [index, batchPlan] of batches.entries()) {
     const batchCount = batchPlan.reduce((sum, item) => sum + item.count, 0);
     const batchInput: QuestionGenerationInput = { ...input, count: batchCount };
-    const result = await generateAdminQuestionCandidatesOnly(batchInput, batchPlan);
+    const { result, attempts } = await generateBatchWithRetry(batchInput, batchPlan);
     const evaluatedBatch = await filterUniqueQuestions([...questions, ...result.questions], { includeVector: true });
     const uniqueNewQuestions = evaluatedBatch.evaluated.slice(questions.length).filter((item) => item.uniqueness.isUnique).map((item) => item.question);
     questions.push(...uniqueNewQuestions);
@@ -231,11 +231,11 @@ async function generateBatchedAdminCandidates(input: QuestionGenerationInput, ge
       returnedCount: result.questions.length,
       uniqueCount: uniqueNewQuestions.length,
       duplicateCount: Math.max(0, result.questions.length - uniqueNewQuestions.length),
-      provider: result.meta.actualProvider
+      provider: result.meta.actualProvider,
+      attempts
     });
 
     if (questions.length >= input.count) break;
-    if (result.questions.length === 0) break;
   }
 
   const unique = await filterUniqueQuestions(questions.slice(0, input.count));
@@ -255,6 +255,24 @@ async function generateBatchedAdminCandidates(input: QuestionGenerationInput, ge
     },
     unique
   };
+}
+
+async function generateBatchWithRetry(input: QuestionGenerationInput, generationPlan: QuestionGenerationPlanItem[]) {
+  const maxAttempts = 3;
+  let result = await generateAdminQuestionCandidatesOnly(input, generationPlan);
+  let attempts = 1;
+
+  while (attempts < maxAttempts && result.questions.length === 0 && input.provider !== "INTERNAL") {
+    await wait(2500 * attempts);
+    result = await generateAdminQuestionCandidatesOnly(input, generationPlan);
+    attempts += 1;
+  }
+
+  return { result, attempts };
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function splitGenerationPlanIntoBatches(generationPlan: QuestionGenerationPlanItem[], batchSize: number) {
