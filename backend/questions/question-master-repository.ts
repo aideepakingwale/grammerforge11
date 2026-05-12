@@ -3,6 +3,7 @@ import { prisma } from "@/backend/db/prisma";
 import type { Question, QuestionBankStats } from "@/backend/shared/types";
 import { questionBank } from "@/backend/questions/question-bank";
 import { fingerprintQuestion } from "@/backend/questions/question-fingerprint";
+import { findVectorDuplicate, saveQuestionEmbeddings } from "@/backend/questions/question-embedding-service";
 
 const emptySubjectStats = {
   MATHS: 0,
@@ -106,6 +107,14 @@ export async function saveQuestionsToQuestionMaster(questions: Question[], sourc
       })),
       skipDuplicates: true
     });
+    const savedRows = await prisma.questionMaster.findMany({
+      where: { contentHash: { in: unique.accepted.map((item) => item.fingerprint.contentHash) } },
+      select: { id: true, contentHash: true }
+    });
+    await saveQuestionEmbeddings(
+      unique.accepted.map((item) => item.question),
+      new Map(savedRows.flatMap((row) => row.contentHash ? [[row.contentHash, row.id] as const] : []))
+    );
     return {
       persisted: unique.accepted.length,
       skipped: unique.rejected.length,
@@ -116,7 +125,7 @@ export async function saveQuestionsToQuestionMaster(questions: Question[], sourc
   }
 }
 
-export async function filterUniqueQuestions(questions: Question[], options: { includeStarterBank?: boolean } = {}) {
+export async function filterUniqueQuestions(questions: Question[], options: { includeStarterBank?: boolean; includeVector?: boolean } = {}) {
   const candidates = questions.map((question) => ({ question, fingerprint: fingerprintQuestion(question) }));
   const includeStarterBank = options.includeStarterBank ?? true;
   const existingMemoryHashes = includeStarterBank ? new Set(questionBank.map((question) => fingerprintQuestion(question).contentHash)) : new Set<string>();
@@ -124,11 +133,13 @@ export async function filterUniqueQuestions(questions: Question[], options: { in
   const seenContent = new Set<string>();
   const seenSemantic = new Set<string>();
   const rejected: Array<{ questionId: string; reason: string; topic?: string; microTopic: string }> = [];
+  const includeVector = options.includeVector ?? true;
 
   const databaseHashes = await findExistingDatabaseHashes(candidates.map((candidate) => candidate.fingerprint));
 
-  const evaluated = candidates.map(({ question, fingerprint }) => {
-    const reason =
+  const evaluated = [];
+  for (const { question, fingerprint } of candidates) {
+    let reason =
       seenContent.has(fingerprint.contentHash) ? "Duplicate inside the generated batch" :
       seenSemantic.has(fingerprint.semanticHash) ? "Near-duplicate inside the generated batch" :
       databaseHashes.content.has(fingerprint.contentHash) ? "Already exists in question_master" :
@@ -137,11 +148,19 @@ export async function filterUniqueQuestions(questions: Question[], options: { in
       existingMemorySemanticHashes.has(fingerprint.semanticHash) ? "Near-duplicate already exists in the starter question bank" :
       "";
 
+    if (!reason && includeVector) {
+      const vectorDuplicate = await findVectorDuplicate(question);
+      if (vectorDuplicate) {
+        reason = `Vector near-duplicate (${Math.round(vectorDuplicate.similarity * 100)}% similar) to existing question ${vectorDuplicate.questionId}: ${vectorDuplicate.questionPreview}`;
+      }
+    }
+
     seenContent.add(fingerprint.contentHash);
     seenSemantic.add(fingerprint.semanticHash);
 
     if (!reason) {
-      return { question, fingerprint, uniqueness: { isUnique: true, contentHash: fingerprint.contentHash, semanticHash: fingerprint.semanticHash } };
+      evaluated.push({ question, fingerprint, uniqueness: { isUnique: true, contentHash: fingerprint.contentHash, semanticHash: fingerprint.semanticHash } });
+      continue;
     }
     rejected.push({
       questionId: question.id,
@@ -149,8 +168,8 @@ export async function filterUniqueQuestions(questions: Question[], options: { in
       topic: question.topic,
       microTopic: question.microTopic
     });
-    return { question, fingerprint, uniqueness: { isUnique: false, reason, contentHash: fingerprint.contentHash, semanticHash: fingerprint.semanticHash } };
-  });
+    evaluated.push({ question, fingerprint, uniqueness: { isUnique: false, reason, contentHash: fingerprint.contentHash, semanticHash: fingerprint.semanticHash } });
+  }
 
   return { accepted: evaluated.filter((item) => item.uniqueness.isUnique), evaluated, rejected };
 }

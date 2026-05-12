@@ -11,6 +11,7 @@ AI-assisted 11+ Grammar School exam preparation SaaS for students and parents. T
 - Configurable commercial tiers: Foundation, Alpha, Velocity, and Apex.
 - Plan-based exam access rules for daily subject limits, question counts, durations, repeat-subject control, Apex custom LLM exams, and shareable generated exams.
 - Admin question-bank loading from LLM/fallback generation on demand or through a scheduled cron job.
+- Neon/Supabase pgvector duplicate detection for generated questions using embeddings before master-bank import.
 - Post-exam external AI prompt helper for enabled tiers, copying full question/option/answer prompts for ChatGPT, Gemini, Claude, or Copilot without using platform LLM quota.
 - Exam engine with timer, sequential navigation, answer autosave, mark for review, formal exam-paper layout, and result review.
 - Subject-specific 11+ question bank for Maths, English, Verbal Reasoning, and Non-Verbal Reasoning.
@@ -109,6 +110,7 @@ npm run start        # Run production build locally
 npm run db:generate  # Generate Prisma client
 npm run db:migrate   # Apply Prisma migration locally
 npm run db:push      # Push schema to hosted database
+npm run db:vector:setup # Enable pgvector question embedding table
 npm run db:studio    # Open Prisma Studio
 ```
 
@@ -123,6 +125,8 @@ Use either Supabase Postgres or Neon Postgres on the free tier.
 
 ```sql
 create extension if not exists citext;
+create extension if not exists vector;
+create extension if not exists pgcrypto;
 ```
 
 3. Copy the pooled connection string into `DATABASE_URL`.
@@ -132,6 +136,7 @@ create extension if not exists citext;
 ```bash
 npm run db:generate
 npm run db:push
+npm run db:vector:setup
 ```
 
 ## Local MySQL Setup
@@ -180,6 +185,7 @@ Note: the current app runtime still uses the modular demo repository for fast UI
 ```bash
 npm run db:generate
 npm run db:push
+npm run db:vector:setup
 ```
 
 ## Zero-Cost Cloud Deployment
